@@ -13,7 +13,11 @@ export function betsRoutes({ db }) {
     const amt = Math.floor(Number(amount_tenge));
     const s = String(side || "").toUpperCase();
 
-    if (!Number.isFinite(mid) || !["A", "B"].includes(s) || !Number.isFinite(amt) || amt <= 0) {
+    if (!Number.isFinite(mid) || !["A", "B"].includes(s)) {
+      return res.status(400).json({ error: "invalid_input" });
+    }
+    // when matching an existing bet, amount is auto-calculated — skip amount check
+    if (against_bet_id == null && (!Number.isFinite(amt) || amt <= 0)) {
       return res.status(400).json({ error: "invalid_input" });
     }
 
