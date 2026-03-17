@@ -110,7 +110,7 @@ function PlayerPicker({ label, selected, onChange, disabledIds = [] }) {
               <Avatar user={u} size={28} />
               <div>
                 <div style={{ fontSize: 14 }}>{displayName(u)}</div>
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>@{u.username} · {u.rating}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>@{u.username} · ур. {u.rating}</div>
               </div>
             </div>
           ))}
@@ -155,7 +155,7 @@ function PlayerSlot({ player, accent }) {
             <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {displayName(player)}
             </div>
-            <div style={{ fontSize: 11, color: "var(--muted)" }}>Рейтинг {player.rating}</div>
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>Уровень {player.rating}</div>
           </div>
         </>
       ) : (
@@ -172,6 +172,7 @@ function Topbar() {
     <header className="topbar">
       <NavLink to="/" className="brand">Paddle Bets</NavLink>
       <nav className="topnav">
+        <NavLink to="/players" className={({ isActive }) => isActive ? "active" : ""}>Игроки</NavLink>
         {user ? (
           <>
             <NavLink to="/create" className={({ isActive }) => isActive ? "active" : ""}>+ Создать</NavLink>
@@ -197,6 +198,10 @@ function BottomNav() {
       <NavLink to="/" end className={({ isActive }) => isActive ? "bnav-item active" : "bnav-item"}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         <span>Матчи</span>
+      </NavLink>
+      <NavLink to="/players" className={({ isActive }) => isActive ? "bnav-item active" : "bnav-item"}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span>Игроки</span>
       </NavLink>
       {user && (
         <NavLink to="/create" className={({ isActive }) => isActive ? "bnav-item active" : "bnav-item"}>
@@ -307,7 +312,7 @@ function RegisterPage() {
 /* ─────────────────────── ProfilePage ────────────────── */
 function ProfilePage() {
   const { user, refreshMe, logout } = useAuth();
-  const [form, setForm] = useState({ first_name: "", last_name: "", rating: 1000 });
+  const [form, setForm] = useState({ first_name: "", last_name: "", rating: 4.0 });
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -317,7 +322,7 @@ function ProfilePage() {
 
   useEffect(() => {
     if (!user) return;
-    setForm({ first_name: user.first_name || "", last_name: user.last_name || "", rating: user.rating ?? 1000 });
+    setForm({ first_name: user.first_name || "", last_name: user.last_name || "", rating: user.rating ?? 4.0 });
   }, [user]);
 
   async function onSave() {
@@ -367,7 +372,18 @@ function ProfilePage() {
             <div className="field"><label>Имя</label><input value={form.first_name} onChange={(e) => setForm((f) => ({ ...f, first_name: e.target.value }))} /></div>
             <div className="field"><label>Фамилия</label><input value={form.last_name} onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} /></div>
           </div>
-          <div className="field"><label>Рейтинг</label><input value={form.rating} onChange={(e) => setForm((f) => ({ ...f, rating: e.target.value }))} inputMode="numeric" /></div>
+          <div className="field">
+            <label>Уровень (напр. 3.5, 4.0, 4.5)</label>
+            <input
+              value={form.rating}
+              onChange={(e) => setForm((f) => ({ ...f, rating: e.target.value }))}
+              inputMode="decimal"
+              step="0.5"
+              min="1.0"
+              max="7.0"
+              placeholder="4.0"
+            />
+          </div>
           {error && <div className="error">{error}</div>}
           {saved && <div style={{ color: "#22c55e", fontSize: 14, textAlign: "center" }}>Сохранено ✓</div>}
           <button disabled={busy} onClick={onSave} className="btn-primary">Сохранить</button>
@@ -918,6 +934,59 @@ function MatchPage() {
   );
 }
 
+/* ──────────────────────── PlayersPage ───────────────── */
+function PlayersPage() {
+  const [players, setPlayers] = useState([]);
+  const [query, setQuery] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.listUsers(query)
+      .then((d) => setPlayers(d.users || []))
+      .catch((e) => setError(e?.data?.error || e.message));
+  }, [query]);
+
+  // level badge color: green ≥5, yellow 3.5–4.5, red <3.5
+  function levelColor(r) {
+    if (r >= 5) return "#22c55e";
+    if (r >= 3.5) return "#f59e0b";
+    return "#ef4444";
+  }
+
+  return (
+    <Page title="Игроки">
+      <div className="vstack" style={{ paddingBottom: 80 }}>
+        <div className="field" style={{ margin: 0 }}>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Поиск по имени или логину…"
+          />
+        </div>
+        {error && <div className="error">{error}</div>}
+        <div className="list">
+          {players.map((p, i) => (
+            <div key={p.id} className="player-row">
+              <div className="player-rank">{i + 1}</div>
+              <Avatar user={p} size={42} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 15 }}>{displayName(p)}</div>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>@{p.username}</div>
+              </div>
+              <div className="level-badge" style={{ background: levelColor(p.rating) + "22", color: levelColor(p.rating), borderColor: levelColor(p.rating) + "55" }}>
+                {Number(p.rating) % 1 === 0 ? p.rating + ".0" : p.rating}
+              </div>
+            </div>
+          ))}
+          {players.length === 0 && !error && (
+            <div className="empty">Игроков не найдено</div>
+          )}
+        </div>
+      </div>
+    </Page>
+  );
+}
+
 /* ─────────────────────── App shell ──────────────────── */
 function AppInner() {
   const { loading } = useAuth();
@@ -927,6 +996,7 @@ function AppInner() {
       <Topbar />
       <Routes>
         <Route path="/" element={<MatchesPage />} />
+        <Route path="/players" element={<PlayersPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/profile" element={<ProfilePage />} />

@@ -377,6 +377,23 @@ button.small { padding: 7px 12px; font-size: 13px; border-radius: 10px; }
   text-align: center;
 }
 
+/* ─── players page ───────────────────────────────────── */
+.player-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.player-rank {
+  font-size: 13px; font-weight: 700; color: var(--muted);
+  min-width: 22px; text-align: right;
+}
+.level-badge {
+  font-size: 15px; font-weight: 800; letter-spacing: -0.02em;
+  padding: 4px 10px; border-radius: 8px; border: 1px solid;
+  white-space: nowrap; flex-shrink: 0;
+}
+
 /* ─── desktop tweaks ─────────────────────────────────── */
 @media (min-width: 600px) {
   .page { padding: 20px 20px 0; }

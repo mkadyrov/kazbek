@@ -13,3 +13,4 @@ client/dist/
 
 # macOS
 .DS_Store
+.vercel

@@ -24,7 +24,7 @@ export function migrate(db) {
       password_hash TEXT NOT NULL,
       first_name TEXT,
       last_name TEXT,
-      rating INTEGER NOT NULL DEFAULT 1000,
+      rating REAL NOT NULL DEFAULT 4.0,
       photo_url TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -56,6 +56,36 @@ export function migrate(db) {
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
     );
   `);
+
+  // migrate rating column from INTEGER to REAL for existing DBs
+  // SQLite stores 3.5 fine even in INTEGER columns due to type affinity,
+  // but we recreate to set REAL affinity properly for new rows
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS users_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        first_name TEXT,
+        last_name TEXT,
+        rating REAL NOT NULL DEFAULT 4.0,
+        photo_url TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    const ratingColType = db.prepare("PRAGMA table_info(users)").all().find(c => c.name === "rating")?.type;
+    if (ratingColType && ratingColType.toUpperCase() !== "REAL") {
+      db.pragma("foreign_keys = OFF");
+      db.exec(`
+        INSERT INTO users_new SELECT * FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_new RENAME TO users;
+      `);
+      db.pragma("foreign_keys = ON");
+    } else {
+      db.exec("DROP TABLE IF EXISTS users_new;");
+    }
+  } catch { /* already migrated */ }
 
   // safe column additions for matches
   for (const sql of [
