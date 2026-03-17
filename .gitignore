@@ -1,0 +1,15 @@
+node_modules/
+.env
+.env.local
+.env.production
+
+# SQLite DB & uploads
+data/
+backend/app/data/
+backend/app/uploads/
+
+# Vite build
+client/dist/
+
+# macOS
+.DS_Store
