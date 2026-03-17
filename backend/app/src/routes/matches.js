@@ -34,7 +34,7 @@ export function matchesRoutes({ db }) {
           u.username AS created_by_username,
           u.first_name AS created_by_first_name,
           u.last_name AS created_by_last_name,
-          (SELECT COALESCE(SUM(amount_tenge), 0) FROM bets b WHERE b.match_id = m.id) AS total_pool_tenge,
+          (SELECT COALESCE(SUM(amount_tenge), 0) FROM bets b WHERE b.match_id = m.id AND b.bet_status != 'cancelled') AS total_pool_tenge,
           (SELECT COUNT(1) FROM bets b WHERE b.match_id = m.id AND b.bet_status = 'matched') / 2 AS matched_pairs_count,
           (SELECT COUNT(1) FROM bets b WHERE b.match_id = m.id AND b.bet_status = 'pending') AS pending_bets_count
         FROM matches m
@@ -72,7 +72,7 @@ export function matchesRoutes({ db }) {
       .get(id);
     if (!match) return res.status(404).json({ error: "not_found" });
 
-    // all bets with user info
+    // all active bets (exclude cancelled — they stay in DB but are hidden)
     const allBets = db
       .prepare(
         `
@@ -82,7 +82,7 @@ export function matchesRoutes({ db }) {
           u.username, u.first_name, u.last_name, u.photo_url
         FROM bets b
         JOIN users u ON u.id = b.user_id
-        WHERE b.match_id = ?
+        WHERE b.match_id = ? AND b.bet_status != 'cancelled'
         ORDER BY b.id ASC
         `
       )
@@ -90,7 +90,7 @@ export function matchesRoutes({ db }) {
 
     const betMap = Object.fromEntries(allBets.map((b) => [b.id, b]));
 
-    // pending: unmatched open challenges
+    // pending: unmatched open challenges (exclude cancelled)
     const pending_bets = allBets.filter((b) => b.bet_status === "pending");
 
     // matched pairs: deduplicated (only emit each pair once, by lower id)

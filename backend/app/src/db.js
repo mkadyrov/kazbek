@@ -17,6 +17,7 @@ export function openDb() {
 }
 
 export function migrate(db) {
+  // Create tables only if they don't exist — never drops or truncates
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +42,7 @@ export function migrate(db) {
       winner TEXT,
       status TEXT NOT NULL DEFAULT 'open',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      FOREIGN KEY(created_by_user_id) REFERENCES users(id) ON DELETE CASCADE
+      FOREIGN KEY(created_by_user_id) REFERENCES users(id)
     );
 
     CREATE TABLE IF NOT EXISTS match_players (
@@ -52,70 +53,60 @@ export function migrate(db) {
       slot INTEGER NOT NULL,
       UNIQUE(match_id, team, slot),
       UNIQUE(match_id, user_id),
-      FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE,
-      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+      FOREIGN KEY(match_id) REFERENCES matches(id),
+      FOREIGN KEY(user_id) REFERENCES users(id)
     );
   `);
 
-  // migrate rating column from INTEGER to REAL for existing DBs
-  // SQLite stores 3.5 fine even in INTEGER columns due to type affinity,
-  // but we recreate to set REAL affinity properly for new rows
-  try {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS users_new (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT NOT NULL UNIQUE,
-        password_hash TEXT NOT NULL,
-        first_name TEXT,
-        last_name TEXT,
-        rating REAL NOT NULL DEFAULT 4.0,
-        photo_url TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      );
-    `);
-    const ratingColType = db.prepare("PRAGMA table_info(users)").all().find(c => c.name === "rating")?.type;
-    if (ratingColType && ratingColType.toUpperCase() !== "REAL") {
-      db.pragma("foreign_keys = OFF");
-      db.exec(`
-        INSERT INTO users_new SELECT * FROM users;
-        DROP TABLE users;
-        ALTER TABLE users_new RENAME TO users;
-      `);
-      db.pragma("foreign_keys = ON");
-    } else {
-      db.exec("DROP TABLE IF EXISTS users_new;");
-    }
-  } catch { /* already migrated */ }
-
-  // safe column additions for matches
+  // Safe additive-only column migrations — never drops anything
   for (const sql of [
     "ALTER TABLE matches ADD COLUMN odds_a REAL NOT NULL DEFAULT 2.0",
     "ALTER TABLE matches ADD COLUMN odds_b REAL NOT NULL DEFAULT 2.0",
     "ALTER TABLE matches ADD COLUMN winner TEXT",
+    // SQLite stores 3.75 fine in an INTEGER column due to type affinity,
+    // so no column type change needed — just ensure the column exists
   ]) {
-    try { db.exec(sql); } catch { /* already exists */ }
+    try { db.exec(sql); } catch { /* column already exists, safe to ignore */ }
   }
 
-  // migrate bets table: check if new schema exists, recreate if needed
+  // bets table: add new columns if missing (never drops rows or the table)
   const betCols = db.prepare("PRAGMA table_info(bets)").all().map((c) => c.name);
+
   if (!betCols.includes("bet_status")) {
-    // disable FK to allow drop
-    db.pragma("foreign_keys = OFF");
-    db.exec(`
-      DROP TABLE IF EXISTS bets;
-      CREATE TABLE bets (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        match_id    INTEGER NOT NULL,
-        user_id     INTEGER NOT NULL,
-        side        TEXT NOT NULL,
-        amount_tenge INTEGER NOT NULL DEFAULT 0,
-        bet_status  TEXT NOT NULL DEFAULT 'pending',
-        matched_bet_id INTEGER,
-        created_at  TEXT NOT NULL DEFAULT (datetime('now')),
-        FOREIGN KEY(match_id) REFERENCES matches(id) ON DELETE CASCADE,
-        FOREIGN KEY(user_id)  REFERENCES users(id)  ON DELETE CASCADE
-      );
-    `);
-    db.pragma("foreign_keys = ON");
+    // First deploy after schema change: recreate only if table had no real data
+    // (old table had amount_cents and UNIQUE constraint — not compatible)
+    const rowCount = betCols.length > 0
+      ? db.prepare("SELECT COUNT(*) AS n FROM bets").get().n
+      : 0;
+
+    if (rowCount === 0) {
+      // Safe to recreate — no data to lose
+      db.pragma("foreign_keys = OFF");
+      db.exec(`
+        DROP TABLE IF EXISTS bets;
+        CREATE TABLE IF NOT EXISTS bets (
+          id             INTEGER PRIMARY KEY AUTOINCREMENT,
+          match_id       INTEGER NOT NULL,
+          user_id        INTEGER NOT NULL,
+          side           TEXT NOT NULL,
+          amount_tenge   INTEGER NOT NULL DEFAULT 0,
+          bet_status     TEXT NOT NULL DEFAULT 'pending',
+          matched_bet_id INTEGER,
+          created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY(match_id) REFERENCES matches(id),
+          FOREIGN KEY(user_id)  REFERENCES users(id)
+        );
+      `);
+      db.pragma("foreign_keys = ON");
+    } else {
+      // Has live data — add columns safely instead of recreating
+      for (const sql of [
+        "ALTER TABLE bets ADD COLUMN amount_tenge INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE bets ADD COLUMN bet_status TEXT NOT NULL DEFAULT 'pending'",
+        "ALTER TABLE bets ADD COLUMN matched_bet_id INTEGER",
+      ]) {
+        try { db.exec(sql); } catch { /* already exists */ }
+      }
+    }
   }
 }

@@ -82,7 +82,7 @@ export function betsRoutes({ db }) {
     }
   });
 
-  // DELETE /api/bets/:id — cancel own pending bet
+  // DELETE /api/bets/:id — soft-cancel own pending bet (never removes the row)
   router.delete("/:id", requireAuth, (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
@@ -92,7 +92,7 @@ export function betsRoutes({ db }) {
     if (bet.user_id !== req.user.id) return res.status(403).json({ error: "forbidden" });
     if (bet.bet_status !== "pending") return res.status(409).json({ error: "bet_already_matched" });
 
-    db.prepare("DELETE FROM bets WHERE id=?").run(id);
+    db.prepare("UPDATE bets SET bet_status='cancelled' WHERE id=?").run(id);
     return res.json({ ok: true });
   });
 
