@@ -97,7 +97,7 @@ function PlayerPicker({ label, selected, onChange, disabledIds = [] }) {
 
       {selected.length < 2 && (
         <input
-          placeholder={`Игрок ${selected.length + 1} из 2…`}
+          placeholder={selected.length === 0 ? "Поиск игрока (необязательно)…" : `Игрок ${selected.length + 1} из 2…`}
           value={query}
           onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
@@ -469,7 +469,6 @@ function CreateMatchPage() {
 
   async function onSubmit(e) {
     e.preventDefault();
-    if (teamA.length !== 2 || teamB.length !== 2) { setError("Выберите по 2 игрока в каждую команду"); return; }
     const oa = parseFloat(form.odds_a); const ob = parseFloat(form.odds_b);
     if (!oa || !ob || oa < 1.01 || ob < 1.01) { setError("Коэффициенты должны быть ≥ 1.01"); return; }
     setError(""); setBusy(true);
@@ -534,7 +533,7 @@ function CreateMatchPage() {
         </div>
 
         {error && <div className="error">{error}</div>}
-        <button disabled={busy || teamA.length !== 2 || teamB.length !== 2} type="submit" className="btn-primary">
+        <button disabled={busy} type="submit" className="btn-primary">
           Создать матч
         </button>
       </form>

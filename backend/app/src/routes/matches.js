@@ -138,12 +138,13 @@ export function matchesRoutes({ db }) {
     const aIds = Array.isArray(team_a) ? team_a.map(Number).filter(Number.isFinite) : [];
     const bIds = Array.isArray(team_b) ? team_b.map(Number).filter(Number.isFinite) : [];
 
-    if (aIds.length !== 2 || bIds.length !== 2) {
-      return res.status(400).json({ error: "need_exactly_2_per_team" });
+    // players are optional — but if provided, max 2 per team and no duplicates
+    if (aIds.length > 2 || bIds.length > 2) {
+      return res.status(400).json({ error: "max_2_per_team" });
     }
 
     const allIds = [...aIds, ...bIds];
-    if (new Set(allIds).size !== 4) {
+    if (new Set(allIds).size !== allIds.length) {
       return res.status(400).json({ error: "duplicate_player" });
     }
 
