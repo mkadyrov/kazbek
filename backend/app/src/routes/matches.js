@@ -206,6 +206,29 @@ export function matchesRoutes({ db }) {
     return res.json({ match: updated });
   });
 
+  // creator updates odds (allowed while match is open or locked)
+  router.patch("/:id/odds", requireAuth, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
+
+    const match = db.prepare("SELECT * FROM matches WHERE id=?").get(id);
+    if (!match) return res.status(404).json({ error: "not_found" });
+    if (match.created_by_user_id !== req.user.id) return res.status(403).json({ error: "forbidden" });
+    if (match.status === "finished" || match.status === "cancelled") {
+      return res.status(409).json({ error: "match_already_closed" });
+    }
+
+    const oa = parseFloat(String(req.body?.odds_a || "").replace(",", "."));
+    const ob = parseFloat(String(req.body?.odds_b || "").replace(",", "."));
+    if (!Number.isFinite(oa) || !Number.isFinite(ob) || oa < 1.01 || ob < 1.01) {
+      return res.status(400).json({ error: "invalid_odds" });
+    }
+
+    db.prepare("UPDATE matches SET odds_a=?, odds_b=? WHERE id=?").run(oa, ob, id);
+    const updated = db.prepare("SELECT * FROM matches WHERE id=?").get(id);
+    return res.json({ match: updated });
+  });
+
   // creator declares winner → marks match finished
   router.patch("/:id/winner", requireAuth, (req, res) => {
     const id = Number(req.params.id);

@@ -50,6 +50,8 @@ export const api = {
 
   setWinner: (id, winner) =>
     request(`/api/matches/${id}/winner`, { method: "PATCH", auth: true, body: { winner } }),
+  updateOdds: (id, odds_a, odds_b) =>
+    request(`/api/matches/${id}/odds`, { method: "PATCH", auth: true, body: { odds_a, odds_b } }),
 
   placeBet: (payload) => request("/api/bets", { method: "POST", auth: true, body: payload }),
   cancelBet: (id) => request(`/api/bets/${id}`, { method: "DELETE", auth: true }),

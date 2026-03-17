@@ -57,6 +57,11 @@ function canCreate(user) {
   return user && MATCH_CREATORS.includes(user.username?.toLowerCase());
 }
 
+// iOS uses comma as decimal separator — normalise before parsing
+function parseDecimal(val) {
+  return parseFloat(String(val).replace(",", "."));
+}
+
 /* ──────────────────── PlayerPicker ───────────────────── */
 function PlayerPicker({ label, selected, onChange, disabledIds = [] }) {
   const [query, setQuery] = useState("");
@@ -333,7 +338,7 @@ function ProfilePage() {
   async function onSave() {
     setError(""); setSaved(false); setBusy(true);
     try {
-      await api.updateMe({ first_name: form.first_name || null, last_name: form.last_name || null, rating: Number(form.rating) });
+      await api.updateMe({ first_name: form.first_name || null, last_name: form.last_name || null, rating: parseDecimal(form.rating) });
       await refreshMe(); setSaved(true);
     } catch (e2) { setError(e2?.data?.error || e2.message); }
     finally { setBusy(false); }
@@ -380,9 +385,10 @@ function ProfilePage() {
           <div className="field">
             <label>Уровень (напр. 3.5, 3.75, 4.0)</label>
             <input
+              type="text"
+              inputMode="decimal"
               value={form.rating}
               onChange={(e) => setForm((f) => ({ ...f, rating: e.target.value }))}
-              inputMode="decimal"
               placeholder="4.0"
             />
           </div>
@@ -469,7 +475,7 @@ function CreateMatchPage() {
 
   async function onSubmit(e) {
     e.preventDefault();
-    const oa = parseFloat(form.odds_a); const ob = parseFloat(form.odds_b);
+    const oa = parseDecimal(form.odds_a); const ob = parseDecimal(form.odds_b);
     if (!oa || !ob || oa < 1.01 || ob < 1.01) { setError("Коэффициенты должны быть ≥ 1.01"); return; }
     setError(""); setBusy(true);
     try {
@@ -523,11 +529,11 @@ function CreateMatchPage() {
           <div className="hstack">
             <div className="field">
               <label style={{ display: "flex", alignItems: "center", gap: 6 }}><span className="team-dot a" />{labelA}</label>
-              <input value={form.odds_a} onChange={(e) => setForm((f) => ({ ...f, odds_a: e.target.value }))} inputMode="decimal" placeholder="2.00" />
+              <input type="text" inputMode="decimal" value={form.odds_a} onChange={(e) => setForm((f) => ({ ...f, odds_a: e.target.value }))} placeholder="2.00" />
             </div>
             <div className="field">
               <label style={{ display: "flex", alignItems: "center", gap: 6 }}><span className="team-dot b" />{labelB}</label>
-              <input value={form.odds_b} onChange={(e) => setForm((f) => ({ ...f, odds_b: e.target.value }))} inputMode="decimal" placeholder="2.00" />
+              <input type="text" inputMode="decimal" value={form.odds_b} onChange={(e) => setForm((f) => ({ ...f, odds_b: e.target.value }))} placeholder="2.00" />
             </div>
           </div>
         </div>
@@ -652,7 +658,7 @@ function NewChallengeWidget({ match, matchId, labelA, labelB, user, onDone }) {
 
   async function submit(e) {
     e.preventDefault(); setErr(""); setBusy(true);
-    const amt = Math.floor(Number(form.amount));
+    const amt = Math.floor(parseDecimal(form.amount));
     if (!amt || amt < 1) { setErr("Введите сумму"); setBusy(false); return; }
     try {
       await api.placeBet({ match_id: matchId, side: form.side, amount_tenge: amt });
@@ -685,7 +691,7 @@ function NewChallengeWidget({ match, matchId, labelA, labelB, user, onDone }) {
       </div>
       <div className="field">
         <label>Сумма вызова, ₸</label>
-        <input value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} inputMode="numeric" placeholder="1000" />
+        <input type="text" inputMode="numeric" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="1000" />
       </div>
       {potWin !== null && Number(form.amount) > 0 && (
         <div className="payout-preview">
@@ -714,6 +720,7 @@ function MatchPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(null);
+  const [oddsForm, setOddsForm] = useState(null); // null = closed, {a,b} = editing
 
   async function load() {
     setError("");
@@ -748,6 +755,17 @@ function MatchPage() {
   async function setWinner(winner) {
     setConfirming(null); setBusy(true); setError("");
     try { await api.setWinner(matchId, winner); await load(); }
+    catch (e2) { setError(e2?.data?.error || e2.message); }
+    finally { setBusy(false); }
+  }
+
+  async function saveOdds() {
+    if (!oddsForm) return;
+    setBusy(true); setError("");
+    try {
+      await api.updateOdds(matchId, oddsForm.a, oddsForm.b);
+      setOddsForm(null); await load();
+    }
     catch (e2) { setError(e2?.data?.error || e2.message); }
     finally { setBusy(false); }
   }
@@ -830,6 +848,37 @@ function MatchPage() {
                 </div>
               </div>
             )}
+            {/* edit odds */}
+            <div style={{ borderTop: "1px solid var(--border)", marginTop: 12, paddingTop: 12 }}>
+              {!oddsForm ? (
+                <button className="secondary small" onClick={() => setOddsForm({ a: String(match.odds_a), b: String(match.odds_b) })}>
+                  Изменить коэффициенты
+                </button>
+              ) : (
+                <div className="vstack tight">
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>Новые коэффициенты:</div>
+                  <div className="hstack">
+                    <div className="field" style={{ flex: 1 }}>
+                      <label style={{ fontSize: 12 }}>{labelA}</label>
+                      <input type="text" inputMode="decimal" value={oddsForm.a}
+                        onChange={(e) => setOddsForm((f) => ({ ...f, a: e.target.value }))}
+                        placeholder="2.00" />
+                    </div>
+                    <div className="field" style={{ flex: 1 }}>
+                      <label style={{ fontSize: 12 }}>{labelB}</label>
+                      <input type="text" inputMode="decimal" value={oddsForm.b}
+                        onChange={(e) => setOddsForm((f) => ({ ...f, b: e.target.value }))}
+                        placeholder="2.00" />
+                    </div>
+                  </div>
+                  <div className="hstack">
+                    <button className="btn-primary" disabled={busy} onClick={saveOdds} style={{ flex: 1 }}>Сохранить</button>
+                    <button className="secondary" onClick={() => setOddsForm(null)}>Отмена</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div style={{ borderTop: "1px solid var(--border)", marginTop: 12, paddingTop: 12 }}>
               <div className="hstack wrap">
                 {["open", "locked", "cancelled"].map((s) => (
