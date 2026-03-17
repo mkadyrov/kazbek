@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import { openDb, migrate } from "./db.js";
 import { config } from "./config.js";
+import { setAuthDb } from "./auth.js";
 import { authRoutes } from "./routes/auth.js";
 import { meRoutes } from "./routes/me.js";
 import { matchesRoutes } from "./routes/matches.js";
@@ -19,6 +20,7 @@ app.use("/uploads", express.static(config.uploadDir));
 
 const db = openDb();
 migrate(db);
+setAuthDb(db);
 
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.use("/api/auth", authRoutes({ db }));

@@ -7,7 +7,8 @@ export function authRoutes({ db }) {
 
   router.post("/register", (req, res) => {
     const { username, password } = req.body || {};
-    if (!username || !password || String(password).length < 6) {
+    const cleanUsername = String(username || "").trim().toLowerCase();
+    if (!cleanUsername || !password || String(password).length < 6) {
       return res.status(400).json({ error: "invalid_input" });
     }
 
@@ -16,7 +17,7 @@ export function authRoutes({ db }) {
       const stmt = db.prepare(
         "INSERT INTO users (username, password_hash) VALUES (?, ?)"
       );
-      const info = stmt.run(String(username).trim(), passwordHash);
+      const info = stmt.run(cleanUsername, passwordHash);
       const user = db
         .prepare(
           "SELECT id, username, first_name, last_name, rating, photo_url, created_at FROM users WHERE id=?"
@@ -34,13 +35,14 @@ export function authRoutes({ db }) {
 
   router.post("/login", (req, res) => {
     const { username, password } = req.body || {};
-    if (!username || !password) {
+    const cleanUsername = String(username || "").trim().toLowerCase();
+    if (!cleanUsername || !password) {
       return res.status(400).json({ error: "invalid_input" });
     }
 
     const row = db
       .prepare("SELECT * FROM users WHERE username=?")
-      .get(String(username).trim());
+      .get(cleanUsername);
     if (!row) return res.status(401).json({ error: "invalid_credentials" });
 
     const ok = bcrypt.compareSync(String(password), row.password_hash);
