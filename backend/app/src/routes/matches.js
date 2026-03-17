@@ -1,5 +1,6 @@
 import express from "express";
 import { requireAuth } from "../auth.js";
+import { config } from "../config.js";
 
 function normalizeStatus(s) {
   const v = String(s || "").toLowerCase();
@@ -120,6 +121,15 @@ export function matchesRoutes({ db }) {
   });
 
   router.post("/", requireAuth, (req, res) => {
+    // check if user is allowed to create matches
+    const allowed = config.matchCreators
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    if (allowed.length > 0 && !allowed.includes(req.user.username.toLowerCase())) {
+      return res.status(403).json({ error: "not_allowed_to_create_matches" });
+    }
+
     const { title, location, start_time, notes, team_a, team_b, odds_a, odds_b } = req.body || {};
     if (!title || !start_time) {
       return res.status(400).json({ error: "invalid_input" });

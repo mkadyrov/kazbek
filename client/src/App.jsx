@@ -52,6 +52,11 @@ const STATUS_BTN_RU = {
   cancelled: "Отменить матч",
 };
 
+const MATCH_CREATORS = ["kazbek", "maxat"];
+function canCreate(user) {
+  return user && MATCH_CREATORS.includes(user.username?.toLowerCase());
+}
+
 /* ──────────────────── PlayerPicker ───────────────────── */
 function PlayerPicker({ label, selected, onChange, disabledIds = [] }) {
   const [query, setQuery] = useState("");
@@ -175,7 +180,7 @@ function Topbar() {
         <NavLink to="/players" className={({ isActive }) => isActive ? "active" : ""}>Игроки</NavLink>
         {user ? (
           <>
-            <NavLink to="/create" className={({ isActive }) => isActive ? "active" : ""}>+ Создать</NavLink>
+            {canCreate(user) && <NavLink to="/create" className={({ isActive }) => isActive ? "active" : ""}>+ Создать</NavLink>}
             <NavLink to="/profile" className={({ isActive }) => isActive ? "active" : ""}><Avatar user={user} size={28} /></NavLink>
             <button className="secondary small" onClick={logout}>Выйти</button>
           </>
@@ -203,7 +208,7 @@ function BottomNav() {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         <span>Игроки</span>
       </NavLink>
-      {user && (
+      {canCreate(user) && (
         <NavLink to="/create" className={({ isActive }) => isActive ? "bnav-item active" : "bnav-item"}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
           <span>Создать</span>
@@ -373,14 +378,11 @@ function ProfilePage() {
             <div className="field"><label>Фамилия</label><input value={form.last_name} onChange={(e) => setForm((f) => ({ ...f, last_name: e.target.value }))} /></div>
           </div>
           <div className="field">
-            <label>Уровень (напр. 3.5, 4.0, 4.5)</label>
+            <label>Уровень (напр. 3.5, 3.75, 4.0)</label>
             <input
               value={form.rating}
               onChange={(e) => setForm((f) => ({ ...f, rating: e.target.value }))}
               inputMode="decimal"
-              step="0.5"
-              min="1.0"
-              max="7.0"
               placeholder="4.0"
             />
           </div>
@@ -485,6 +487,7 @@ function CreateMatchPage() {
   }
 
   if (!user) return <Page title="Создать матч"><div className="panel">Нужно войти.</div></Page>;
+  if (!canCreate(user)) return <Page title="Создать матч"><div className="empty" style={{ marginTop: 40 }}>У вас нет прав для создания матчей.</div></Page>;
 
   return (
     <Page title="Создать матч">
