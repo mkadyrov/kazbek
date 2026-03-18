@@ -34,7 +34,7 @@ export function matchesRoutes({ db }) {
           u.username AS created_by_username,
           u.first_name AS created_by_first_name,
           u.last_name AS created_by_last_name,
-          (SELECT COALESCE(SUM(amount_tenge), 0) FROM bets b WHERE b.match_id = m.id AND b.bet_status != 'cancelled') AS total_pool_tenge,
+          (SELECT COALESCE(SUM(amount_tenge - commission_tenge), 0) FROM bets b WHERE b.match_id = m.id AND b.bet_status = 'matched') AS total_pool_tenge,
           (SELECT COUNT(1) FROM bets b WHERE b.match_id = m.id AND b.bet_status = 'matched') / 2 AS matched_pairs_count,
           (SELECT COUNT(1) FROM bets b WHERE b.match_id = m.id AND b.bet_status = 'pending') AS pending_bets_count
         FROM matches m
@@ -78,7 +78,7 @@ export function matchesRoutes({ db }) {
         `
         SELECT
           b.id, b.match_id, b.user_id, b.side,
-          b.amount_tenge, b.bet_status, b.matched_bet_id, b.created_at,
+          b.amount_tenge, b.commission_tenge, b.bet_status, b.matched_bet_id, b.created_at,
           u.username, u.first_name, u.last_name, u.photo_url
         FROM bets b
         JOIN users u ON u.id = b.user_id
@@ -107,11 +107,15 @@ export function matchesRoutes({ db }) {
 
       const betA = b.side === "A" ? b : partner;
       const betB = b.side === "B" ? b : partner;
+      const pot = betA.amount_tenge + betB.amount_tenge;
+      const commission = (betA.commission_tenge || 0) + (betB.commission_tenge || 0);
       matched_pairs.push({
         id: pairKey,
         bet_a: betA,
         bet_b: betB,
-        pot_tenge: betA.amount_tenge + betB.amount_tenge,
+        pot_tenge: pot,
+        commission_tenge: commission,
+        net_payout: pot - commission,
       });
     }
 

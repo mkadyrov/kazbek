@@ -57,6 +57,7 @@ export const api = {
   cancelBet: (id) => request(`/api/bets/${id}`, { method: "DELETE", auth: true }),
 
   listUsers: (q) => request(`/api/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  getDailyStats: () => request("/api/stats/daily", { auth: true }),
 
   uploadAvatar: async (file) => {
     const t = getToken();

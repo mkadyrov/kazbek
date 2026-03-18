@@ -69,6 +69,9 @@ export function migrate(db) {
     try { db.exec(sql); } catch { /* column already exists, safe to ignore */ }
   }
 
+  // add commission column to bets — safe, additive only
+  try { db.exec("ALTER TABLE bets ADD COLUMN commission_tenge INTEGER NOT NULL DEFAULT 0"); } catch { /* exists */ }
+
   // bets table: add new columns if missing (never drops rows or the table)
   const betCols = db.prepare("PRAGMA table_info(bets)").all().map((c) => c.name);
 

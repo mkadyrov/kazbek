@@ -1,12 +1,17 @@
 import express from "express";
 import { requireAuth } from "../auth.js";
 
+const COMMISSION_RATE = 0.05; // 5%
+
+function calcCommission(amount) {
+  return Math.max(0, Math.floor(amount * COMMISSION_RATE));
+}
+
 export function betsRoutes({ db }) {
   const router = express.Router();
 
   // POST /api/bets
   // body: { match_id, side, amount_tenge, against_bet_id? }
-  //   against_bet_id — match against a specific pending opposing bet
   router.post("/", requireAuth, (req, res) => {
     const { match_id, side, amount_tenge, against_bet_id } = req.body || {};
     const mid = Number(match_id);
@@ -16,7 +21,6 @@ export function betsRoutes({ db }) {
     if (!Number.isFinite(mid) || !["A", "B"].includes(s)) {
       return res.status(400).json({ error: "invalid_input" });
     }
-    // when matching an existing bet, amount is auto-calculated — skip amount check
     if (against_bet_id == null && (!Number.isFinite(amt) || amt <= 0)) {
       return res.status(400).json({ error: "invalid_input" });
     }
@@ -25,7 +29,7 @@ export function betsRoutes({ db }) {
     if (!match) return res.status(404).json({ error: "match_not_found" });
     if (match.status !== "open") return res.status(409).json({ error: "match_not_open" });
 
-    // ── case 1: match against an existing pending bet ──────────────
+    // ── case 1: accept an existing pending bet ─────────────────────
     if (against_bet_id != null) {
       const aid = Number(against_bet_id);
       if (!Number.isFinite(aid)) return res.status(400).json({ error: "invalid_against_bet_id" });
@@ -37,20 +41,17 @@ export function betsRoutes({ db }) {
       if (opposing.bet_status !== "pending") return res.status(409).json({ error: "bet_already_matched" });
       if (opposing.user_id === req.user.id) return res.status(400).json({ error: "cannot_bet_against_yourself" });
 
-      // calculate the required counter-stake from odds
-      // if opposing bet is on side A with odds_a:
-      //   counter_stake = opposing.amount_tenge × (odds_a − 1)
-      // Winner takes both: total pot = opposing.amount_tenge + counter_stake = opposing.amount_tenge × odds_a
       const opposingOdds = opposing.side === "A" ? match.odds_a : match.odds_b;
       const counterAmt = Math.max(1, Math.round(opposing.amount_tenge * (opposingOdds - 1)));
+      const commission = calcCommission(counterAmt);
 
       const doMatch = db.transaction(() => {
         const info = db
           .prepare(
-            `INSERT INTO bets (match_id, user_id, side, amount_tenge, bet_status, matched_bet_id)
-             VALUES (?, ?, ?, ?, 'matched', ?)`
+            `INSERT INTO bets (match_id, user_id, side, amount_tenge, commission_tenge, bet_status, matched_bet_id)
+             VALUES (?, ?, ?, ?, ?, 'matched', ?)`
           )
-          .run(mid, req.user.id, s, counterAmt, aid);
+          .run(mid, req.user.id, s, counterAmt, commission, aid);
 
         const newBetId = info.lastInsertRowid;
         db.prepare(
@@ -70,14 +71,15 @@ export function betsRoutes({ db }) {
       }
     }
 
-    // ── case 2: create a new pending open bet (challenge) ──────────
+    // ── case 2: create new open challenge ──────────────────────────
+    const commission = calcCommission(amt);
     try {
       const info = db
         .prepare(
-          `INSERT INTO bets (match_id, user_id, side, amount_tenge, bet_status)
-           VALUES (?, ?, ?, ?, 'pending')`
+          `INSERT INTO bets (match_id, user_id, side, amount_tenge, commission_tenge, bet_status)
+           VALUES (?, ?, ?, ?, ?, 'pending')`
         )
-        .run(mid, req.user.id, s, amt);
+        .run(mid, req.user.id, s, amt, commission);
 
       const bet = db.prepare("SELECT * FROM bets WHERE id=?").get(info.lastInsertRowid);
       return res.json({ bet });
@@ -86,7 +88,7 @@ export function betsRoutes({ db }) {
     }
   });
 
-  // DELETE /api/bets/:id — soft-cancel own pending bet (never removes the row)
+  // DELETE /api/bets/:id — soft-cancel, never removes the row
   router.delete("/:id", requireAuth, (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });

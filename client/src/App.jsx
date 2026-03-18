@@ -183,6 +183,7 @@ function Topbar() {
       <NavLink to="/" className="brand">Paddle Bets</NavLink>
       <nav className="topnav">
         <NavLink to="/players" className={({ isActive }) => isActive ? "active" : ""}>Игроки</NavLink>
+        {canCreate(user) && <NavLink to="/stats" className={({ isActive }) => isActive ? "active" : ""}>Статистика</NavLink>}
         {user ? (
           <>
             {canCreate(user) && <NavLink to="/create" className={({ isActive }) => isActive ? "active" : ""}>+ Создать</NavLink>}
@@ -217,6 +218,12 @@ function BottomNav() {
         <NavLink to="/create" className={({ isActive }) => isActive ? "bnav-item active" : "bnav-item"}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
           <span>Создать</span>
+        </NavLink>
+      )}
+      {canCreate(user) && (
+        <NavLink to="/stats" className={({ isActive }) => isActive ? "bnav-item active" : "bnav-item"}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span>Статистика</span>
         </NavLink>
       )}
       {user ? (
@@ -583,7 +590,10 @@ function PendingBetsSection({ pendingBets, matchId, labelA, labelB, match, user,
         const oppoLabel  = b.side === "A" ? labelB : labelA;
         const odds = b.side === "A" ? match.odds_a : match.odds_b;
         const counterAmt = Math.max(1, Math.round(b.amount_tenge * (odds - 1)));
+        const myCommission = Math.floor(counterAmt * 0.05);
+        const theirCommission = b.commission_tenge || Math.floor(b.amount_tenge * 0.05);
         const pot = b.amount_tenge + counterAmt;
+        const netPayout = pot - myCommission - theirCommission;
         const isConfirming = accepting?.id === b.id;
 
         return (
@@ -616,7 +626,9 @@ function PendingBetsSection({ pendingBets, matchId, labelA, labelB, match, user,
                   <span style={{ color: b.side === "A" ? "#ef4444" : "#22c55e", fontWeight: 600 }}>
                     {oppoLabel}
                   </span>
-                  : <strong>{counterAmt.toLocaleString("ru-RU")} ₸</strong> · Банк: {pot.toLocaleString("ru-RU")} ₸
+                  : <strong>{counterAmt.toLocaleString("ru-RU")} ₸</strong>
+                  {" · "}Выигрыш: <strong style={{ color: "#22c55e" }}>{netPayout.toLocaleString("ru-RU")} ₸</strong>
+                  {" · "}<span style={{ color: "#f59e0b" }}>Ком.: −{(myCommission + theirCommission).toLocaleString("ru-RU")} ₸</span>
                 </div>
                 <button className="btn-accept" disabled={busy} onClick={() => setAccepting(b)}>
                   Принять вызов
@@ -626,7 +638,8 @@ function PendingBetsSection({ pendingBets, matchId, labelA, labelB, match, user,
               <div className="confirm-box">
                 <div style={{ fontSize: 13, marginBottom: 8 }}>
                   Принять вызов? Ваша ставка: <strong>{counterAmt.toLocaleString("ru-RU")} ₸</strong> на {oppoLabel}.<br />
-                  Победитель заберёт <strong>{pot.toLocaleString("ru-RU")} ₸</strong>.
+                  Победитель заберёт <strong style={{ color: "#22c55e" }}>{netPayout.toLocaleString("ru-RU")} ₸</strong>
+                  {" "}(комиссия 5%: {(myCommission + theirCommission).toLocaleString("ru-RU")} ₸).
                 </div>
                 <div className="hstack">
                   <button className="btn-primary" disabled={busy} onClick={() => doAccept(b)} style={{ flex: 1 }}>
@@ -654,7 +667,9 @@ function NewChallengeWidget({ match, matchId, labelA, labelB, user, onDone }) {
   if (match.status !== "open") return <div className="empty">Приём ставок закрыт</div>;
 
   const odds = form.side === "A" ? match.odds_a : match.odds_b;
-  const potWin = odds ? Math.round(Number(form.amount) * (odds - 1)) : null;
+  const stakeAmt = parseDecimal(form.amount) || 0;
+  const commission = Math.floor(stakeAmt * 0.05);
+  const potWin = odds ? Math.round(stakeAmt * (odds - 1)) : null;
 
   async function submit(e) {
     e.preventDefault(); setErr(""); setBusy(true);
@@ -693,12 +708,15 @@ function NewChallengeWidget({ match, matchId, labelA, labelB, user, onDone }) {
         <label>Сумма вызова, ₸</label>
         <input type="text" inputMode="numeric" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} placeholder="1000" />
       </div>
-      {potWin !== null && Number(form.amount) > 0 && (
+      {potWin !== null && stakeAmt > 0 && (
         <div className="payout-preview">
-          Выигрыш если победят {form.side === "A" ? labelA : labelB}:{" "}
-          <strong>{(Number(form.amount) + potWin).toLocaleString("ru-RU")} ₸</strong>
-          <div style={{ fontSize: 11, marginTop: 2, color: "var(--muted)" }}>
-            (ставка {Number(form.amount).toLocaleString("ru-RU")} + прибыль {potWin.toLocaleString("ru-RU")} ₸)
+          <div>Выигрыш если победят <strong>{form.side === "A" ? labelA : labelB}</strong>:{" "}
+            <strong style={{ color: "#22c55e" }}>{(stakeAmt + potWin - commission).toLocaleString("ru-RU")} ₸</strong>
+          </div>
+          <div style={{ fontSize: 11, marginTop: 4, color: "var(--muted)", display: "flex", gap: 10 }}>
+            <span>Ставка: {stakeAmt.toLocaleString("ru-RU")} ₸</span>
+            <span>Прибыль: {potWin.toLocaleString("ru-RU")} ₸</span>
+            <span style={{ color: "#f59e0b" }}>Комиссия 5%: −{commission.toLocaleString("ru-RU")} ₸</span>
           </div>
         </div>
       )}
@@ -968,10 +986,18 @@ function MatchPage() {
                     <div className="matched-pair-pot">
                       {pairWinner ? (
                         <span style={{ color: "#22c55e" }}>
-                          🏆 {displayName(pairWinner)} получает {pair.pot_tenge.toLocaleString("ru-RU")} ₸
+                          🏆 {displayName(pairWinner)} получает{" "}
+                          <strong>{(pair.net_payout ?? pair.pot_tenge).toLocaleString("ru-RU")} ₸</strong>
                         </span>
                       ) : (
-                        <span>Банк пары: <strong>{pair.pot_tenge.toLocaleString("ru-RU")} ₸</strong></span>
+                        <span>
+                          Банк: <strong>{(pair.net_payout ?? pair.pot_tenge).toLocaleString("ru-RU")} ₸</strong>
+                          {pair.commission_tenge > 0 && (
+                            <span style={{ color: "#f59e0b", fontSize: 11, marginLeft: 6 }}>
+                              (−{pair.commission_tenge.toLocaleString("ru-RU")} ₸ ком.)
+                            </span>
+                          )}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -1038,6 +1064,79 @@ function PlayersPage() {
   );
 }
 
+/* ──────────────────────── StatsPage ─────────────────── */
+function StatsPage() {
+  const { user } = useAuth();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.getDailyStats()
+      .then(setData)
+      .catch((e) => setError(e?.data?.error || e.message));
+  }, []);
+
+  if (!canCreate(user)) {
+    return <Page title="Статистика"><div className="empty" style={{ marginTop: 40 }}>Нет доступа</div></Page>;
+  }
+
+  const days = data?.days || [];
+  const totals = data?.totals;
+
+  return (
+    <Page title="Статистика">
+      <div className="vstack" style={{ paddingBottom: 80 }}>
+        {error && <div className="error">{error}</div>}
+
+        {/* totals card */}
+        {totals && (
+          <div className="section-card">
+            <div className="section-title">За всё время</div>
+            <div className="pool-row" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+              <div className="pool-item">
+                <span className="pool-label">Ставок</span>
+                <span className="pool-value">{totals.bets_total}</span>
+              </div>
+              <div className="pool-item">
+                <span className="pool-label">Оборот</span>
+                <span className="pool-value">{(totals.volume_tenge || 0).toLocaleString("ru-RU")} ₸</span>
+              </div>
+              <div className="pool-item" style={{ color: "#f59e0b" }}>
+                <span className="pool-label">Комиссия</span>
+                <span className="pool-value" style={{ color: "#f59e0b" }}>{(totals.commission_tenge || 0).toLocaleString("ru-RU")} ₸</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* daily breakdown */}
+        <div className="section-card">
+          <div className="section-title">По дням</div>
+          {days.length === 0 && !error && <div className="empty">Данных пока нет</div>}
+          <div className="stats-table">
+            {days.length > 0 && (
+              <div className="stats-header">
+                <span>Дата</span>
+                <span>Ставок</span>
+                <span>Оборот</span>
+                <span>Комиссия</span>
+              </div>
+            )}
+            {days.map((d) => (
+              <div key={d.day} className="stats-row">
+                <span className="stats-date">{new Date(d.day + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</span>
+                <span>{d.bets_total}</span>
+                <span>{(d.volume_tenge || 0).toLocaleString("ru-RU")} ₸</span>
+                <span style={{ color: "#f59e0b", fontWeight: 600 }}>{(d.commission_tenge || 0).toLocaleString("ru-RU")} ₸</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Page>
+  );
+}
+
 /* ─────────────────────── App shell ──────────────────── */
 function AppInner() {
   const { loading } = useAuth();
@@ -1047,7 +1146,8 @@ function AppInner() {
       <Topbar />
       <Routes>
         <Route path="/" element={<MatchesPage />} />
-        <Route path="/players" element={<PlayersPage />} />
+            <Route path="/players" element={<PlayersPage />} />
+            <Route path="/stats" element={<StatsPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/profile" element={<ProfilePage />} />
