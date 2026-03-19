@@ -5,5 +5,5 @@ export const config = {
   uploadDir: process.env.UPLOAD_DIR || "./uploads",
   corsOrigin: process.env.CORS_ORIGIN || "*",
   // comma-separated usernames allowed to create matches; empty = everyone
-  matchCreators: process.env.MATCH_CREATORS || "kazbek,maxat",
+  matchCreators: process.env.MATCH_CREATORS || "kazbek,maxat,nur_asan1701",
 };
