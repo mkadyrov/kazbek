@@ -1,4 +1,5 @@
 {
+  "name": "paddlebet",
   "buildCommand": "cd client && npm install && npm run build",
   "outputDirectory": "client/dist",
   "routes": [
