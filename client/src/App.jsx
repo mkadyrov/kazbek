@@ -467,7 +467,9 @@ function MatchesPage() {
                   {teamA.slice(0, 2).map((p) => <Avatar key={p.id} user={p} size={22} />)}
                   <span>{labelA}</span>
                 </div>
-                <div className="vs-badge">VS</div>
+                <div className={`vs-badge${m.score ? " has-score" : ""}`}>
+                  {m.score || "VS"}
+                </div>
                 <div className="vs-team right">
                   <span>{labelB}</span>
                   {teamB.slice(0, 2).map((p) => <Avatar key={p.id} user={p} size={22} />)}
@@ -597,7 +599,7 @@ function EditMatchPage() {
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ title: "", location: "", start_time: "", notes: "", odds_a: "2.00", odds_b: "2.00" });
+  const [form, setForm] = useState({ title: "", location: "", start_time: "", notes: "", odds_a: "2.00", odds_b: "2.00", score: "" });
   const [teamA, setTeamA] = useState([]);
   const [teamB, setTeamB] = useState([]);
   const [error, setError] = useState("");
@@ -618,6 +620,7 @@ function EditMatchPage() {
           notes:      m.notes || "",
           odds_a:     String(m.odds_a ?? "2.00"),
           odds_b:     String(m.odds_b ?? "2.00"),
+          score:      m.score || "",
         });
         const players = d.players || [];
         setTeamA(players.filter((p) => p.team === "A"));
@@ -643,6 +646,7 @@ function EditMatchPage() {
         team_b:     teamB.map((u) => u.id),
         odds_a:     oa,
         odds_b:     ob,
+        score:      form.score || null,
       });
       nav(`/match/${matchId}`);
     } catch (e2) { setError(e2?.data?.error || e2.message); }
@@ -666,6 +670,7 @@ function EditMatchPage() {
             <div className="field"><label>Название</label><input required value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Финал клубного турнира" /></div>
             <div className="field"><label>Локация</label><input value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} placeholder="Клуб / корт" /></div>
             <div className="field"><label>Дата и время</label><input required type="datetime-local" value={form.start_time} onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))} /></div>
+            <div className="field"><label>Счёт (необязательно, например: 6:4)</label><input value={form.score} onChange={(e) => setForm((f) => ({ ...f, score: e.target.value }))} placeholder="6:4" maxLength={30} /></div>
             <div className="field"><label>Заметки</label><textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></div>
           </div>
         </div>
@@ -1141,7 +1146,8 @@ function MatchPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(null);
-  const [oddsForm, setOddsForm] = useState(null); // null = closed, {a,b} = editing
+  const [oddsForm, setOddsForm]   = useState(null); // null = closed, {a,b} = editing
+  const [scoreInput, setScoreInput] = useState(null); // null = closed, string = editing
 
   async function load() {
     setError("");
@@ -1191,6 +1197,16 @@ function MatchPage() {
     finally { setBusy(false); }
   }
 
+  async function saveScore() {
+    setBusy(true); setError("");
+    try {
+      await api.setScore(matchId, scoreInput?.trim() || null);
+      setScoreInput(null); await load();
+    }
+    catch (e2) { setError(e2?.data?.error || e2.message); }
+    finally { setBusy(false); }
+  }
+
   if (!match) {
     return (
       <Page title="Матч" back>
@@ -1232,7 +1248,9 @@ function MatchPage() {
               </div>
               <div className="odds-badge a">×{match.odds_a?.toFixed(2)}</div>
             </div>
-            <div className="vs-detail-mid">VS</div>
+            <div className={`vs-detail-mid${match.score ? " has-score" : ""}`}>
+              {match.score || "VS"}
+            </div>
             <div className="vs-detail-team">
               <div className="vs-detail-label b">Команда B</div>
               <div className="vstack tight">
@@ -1278,6 +1296,40 @@ function MatchPage() {
                 </div>
               </div>
             )}
+            {/* edit score */}
+            <div style={{ borderTop: "1px solid var(--border)", marginTop: 12, paddingTop: 12 }}>
+              {scoreInput === null ? (
+                <div className="hstack" style={{ alignItems: "center" }}>
+                  <button className="secondary small" onClick={() => setScoreInput(match.score || "")}>
+                    {match.score ? `Счёт: ${match.score} · Изменить` : "Установить счёт"}
+                  </button>
+                  {match.score && (
+                    <button className="danger small" disabled={busy} onClick={() => { setScoreInput(null); api.setScore(matchId, null).then(load); }}>
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="vstack tight">
+                  <div style={{ fontSize: 13, color: "var(--muted)" }}>Счёт (например: 6:4 или 3:1)</div>
+                  <div className="hstack">
+                    <input
+                      style={{ flex: 1, textAlign: "center", fontWeight: 700, fontSize: 18, letterSpacing: 2 }}
+                      value={scoreInput}
+                      onChange={(e) => setScoreInput(e.target.value)}
+                      placeholder="6:4"
+                      maxLength={30}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="hstack">
+                    <button className="btn-primary" disabled={busy} onClick={saveScore} style={{ flex: 1 }}>Сохранить</button>
+                    <button className="secondary" onClick={() => setScoreInput(null)}>Отмена</button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* edit odds */}
             <div style={{ borderTop: "1px solid var(--border)", marginTop: 12, paddingTop: 12 }}>
               {!oddsForm ? (

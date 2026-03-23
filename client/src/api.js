@@ -49,6 +49,8 @@ export const api = {
     request(`/api/matches/${id}`, { method: "PATCH", auth: true, body: payload }),
   setMatchStatus: (id, status) =>
     request(`/api/matches/${id}/status`, { method: "PATCH", auth: true, body: { status } }),
+  setScore: (id, score) =>
+    request(`/api/matches/${id}/score`, { method: "PATCH", auth: true, body: { score } }),
 
   setWinner: (id, winner) =>
     request(`/api/matches/${id}/winner`, { method: "PATCH", auth: true, body: { winner } }),

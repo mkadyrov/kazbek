@@ -200,7 +200,7 @@ export function matchesRoutes({ db }) {
       return res.status(409).json({ error: "match_already_closed" });
     }
 
-    const { title, location, start_time, notes, team_a, team_b, odds_a, odds_b } = req.body || {};
+    const { title, location, start_time, notes, team_a, team_b, odds_a, odds_b, score } = req.body || {};
     if (!title || !start_time) return res.status(400).json({ error: "invalid_input" });
 
     const aIds = Array.isArray(team_a) ? team_a.map(Number).filter(Number.isFinite) : [];
@@ -214,13 +214,15 @@ export function matchesRoutes({ db }) {
 
     const doUpdate = db.transaction(() => {
       db.prepare(
-        `UPDATE matches SET title=?, location=?, start_time=?, notes=?, odds_a=?, odds_b=? WHERE id=?`
+        `UPDATE matches SET title=?, location=?, start_time=?, notes=?, odds_a=?, odds_b=?, score=? WHERE id=?`
       ).run(
         String(title).trim(),
         location ? String(location).trim() : null,
         String(start_time),
         notes ? String(notes).trim() : null,
-        oa, ob, id
+        oa, ob,
+        score ? String(score).trim() : null,
+        id
       );
       db.prepare("DELETE FROM match_players WHERE match_id=?").run(id);
       const insertPlayer = db.prepare(
@@ -238,6 +240,24 @@ export function matchesRoutes({ db }) {
     } catch (e) {
       return res.status(500).json({ error: "server_error", detail: e.message });
     }
+  });
+
+  // creator can update the score at any time (except cancelled)
+  router.patch("/:id/score", requireAuth, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
+
+    const match = db.prepare("SELECT * FROM matches WHERE id=?").get(id);
+    if (!match) return res.status(404).json({ error: "not_found" });
+    if (match.created_by_user_id !== req.user.id) return res.status(403).json({ error: "forbidden" });
+    if (match.status === "cancelled") return res.status(409).json({ error: "match_cancelled" });
+
+    const score = req.body?.score != null ? String(req.body.score).trim() : null;
+    if (score !== null && score.length > 30) return res.status(400).json({ error: "score_too_long" });
+
+    db.prepare("UPDATE matches SET score=? WHERE id=?").run(score || null, id);
+    const updated = db.prepare("SELECT * FROM matches WHERE id=?").get(id);
+    return res.json({ match: updated });
   });
 
   // creator can lock/cancel the match (but NOT finish — use /winner for that)
