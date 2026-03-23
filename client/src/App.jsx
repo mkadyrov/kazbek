@@ -182,7 +182,6 @@ function Topbar() {
     <header className="topbar">
       <NavLink to="/" className="brand">
         <img src="/logo.png" alt="Paddle Bets" className="brand-logo" />
-        <span>Paddle Bets</span>
       </NavLink>
       <nav className="topnav">
         <NavLink to="/players" className={({ isActive }) => isActive ? "active" : ""}>Игроки</NavLink>
