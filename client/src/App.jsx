@@ -180,7 +180,10 @@ function Topbar() {
   const { user, logout } = useAuth();
   return (
     <header className="topbar">
-      <NavLink to="/" className="brand">Paddle Bets</NavLink>
+      <NavLink to="/" className="brand">
+        <img src="/logo.png" alt="Paddle Bets" className="brand-logo" />
+        <span>Paddle Bets</span>
+      </NavLink>
       <nav className="topnav">
         <NavLink to="/players" className={({ isActive }) => isActive ? "active" : ""}>Игроки</NavLink>
         {canCreate(user) && <NavLink to="/stats" className={({ isActive }) => isActive ? "active" : ""}>Статистика</NavLink>}
