@@ -45,6 +45,8 @@ export const api = {
   listMatches: () => request("/api/matches"),
   getMatch: (id) => request(`/api/matches/${id}`),
   createMatch: (payload) => request("/api/matches", { method: "POST", auth: true, body: payload }),
+  updateMatch: (id, payload) =>
+    request(`/api/matches/${id}`, { method: "PATCH", auth: true, body: payload }),
   setMatchStatus: (id, status) =>
     request(`/api/matches/${id}/status`, { method: "PATCH", auth: true, body: { status } }),
 

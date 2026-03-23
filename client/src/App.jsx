@@ -582,6 +582,136 @@ function CreateMatchPage() {
 }
 
 
+/* ────────────────────── EditMatchPage ───────────────── */
+function toDatetimeLocal(isoStr) {
+  if (!isoStr) return "";
+  const d = new Date(isoStr);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function EditMatchPage() {
+  const { id } = useParams();
+  const matchId = Number(id);
+  const nav = useNavigate();
+  const { user } = useAuth();
+
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ title: "", location: "", start_time: "", notes: "", odds_a: "2.00", odds_b: "2.00" });
+  const [teamA, setTeamA] = useState([]);
+  const [teamB, setTeamB] = useState([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const allSelected = useMemo(() => [...teamA, ...teamB].map((u) => u.id), [teamA, teamB]);
+  const labelA = teamA.map(displayName).join(" & ") || "Команда A";
+  const labelB = teamB.map(displayName).join(" & ") || "Команда B";
+
+  useEffect(() => {
+    api.getMatch(matchId)
+      .then((d) => {
+        const m = d.match;
+        setForm({
+          title:      m.title || "",
+          location:   m.location || "",
+          start_time: toDatetimeLocal(m.start_time),
+          notes:      m.notes || "",
+          odds_a:     String(m.odds_a ?? "2.00"),
+          odds_b:     String(m.odds_b ?? "2.00"),
+        });
+        const players = d.players || [];
+        setTeamA(players.filter((p) => p.team === "A"));
+        setTeamB(players.filter((p) => p.team === "B"));
+        setLoading(false);
+      })
+      .catch((e) => { setError(e?.data?.error || e.message); setLoading(false); });
+  }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function onSubmit(e) {
+    e.preventDefault();
+    const oa = parseDecimal(form.odds_a);
+    const ob = parseDecimal(form.odds_b);
+    if (!oa || !ob || oa < 1.01 || ob < 1.01) { setError("Коэффициенты должны быть ≥ 1.01"); return; }
+    setError(""); setBusy(true);
+    try {
+      await api.updateMatch(matchId, {
+        title:      form.title,
+        location:   form.location || null,
+        start_time: form.start_time ? new Date(form.start_time).toISOString() : null,
+        notes:      form.notes || null,
+        team_a:     teamA.map((u) => u.id),
+        team_b:     teamB.map((u) => u.id),
+        odds_a:     oa,
+        odds_b:     ob,
+      });
+      nav(`/match/${matchId}`);
+    } catch (e2) { setError(e2?.data?.error || e2.message); }
+    finally { setBusy(false); }
+  }
+
+  if (!user || !canCreate(user)) {
+    return <Page title="Редактировать матч" back><div className="empty" style={{ marginTop: 40 }}>Нет доступа.</div></Page>;
+  }
+
+  if (loading) {
+    return <Page title="Редактировать матч" back><div className="empty">Загрузка…</div></Page>;
+  }
+
+  return (
+    <Page title="Редактировать матч" back>
+      <form onSubmit={onSubmit} className="vstack" style={{ padding: "0 0 100px" }}>
+        <div className="section-card">
+          <div className="section-title">Основное</div>
+          <div className="vstack tight">
+            <div className="field"><label>Название</label><input required value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Финал клубного турнира" /></div>
+            <div className="field"><label>Локация</label><input value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} placeholder="Клуб / корт" /></div>
+            <div className="field"><label>Дата и время</label><input required type="datetime-local" value={form.start_time} onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))} /></div>
+            <div className="field"><label>Заметки</label><textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></div>
+          </div>
+        </div>
+
+        <div className="section-card">
+          <div className="section-title">Команды</div>
+          <div className="teams-grid">
+            <div className="team-block team-a">
+              <div className="team-header"><span className="team-dot a" />Команда A</div>
+              <PlayerPicker label="" selected={teamA} onChange={setTeamA} disabledIds={allSelected.filter((id) => !teamA.map((u) => u.id).includes(id))} />
+            </div>
+            <div className="team-block team-b">
+              <div className="team-header"><span className="team-dot b" />Команда B</div>
+              <PlayerPicker label="" selected={teamB} onChange={setTeamB} disabledIds={allSelected.filter((id) => !teamB.map((u) => u.id).includes(id))} />
+            </div>
+          </div>
+        </div>
+
+        <div className="section-card">
+          <div className="section-title">Коэффициенты</div>
+          <div className="hstack">
+            <div className="field">
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}><span className="team-dot a" />{labelA}</label>
+              <input type="text" inputMode="decimal" value={form.odds_a} onChange={(e) => setForm((f) => ({ ...f, odds_a: e.target.value }))} placeholder="2.00" />
+            </div>
+            <div className="field">
+              <label style={{ display: "flex", alignItems: "center", gap: 6 }}><span className="team-dot b" />{labelB}</label>
+              <input type="text" inputMode="decimal" value={form.odds_b} onChange={(e) => setForm((f) => ({ ...f, odds_b: e.target.value }))} placeholder="2.00" />
+            </div>
+          </div>
+        </div>
+
+        {error && <div className="error">{error}</div>}
+        <div className="hstack">
+          <button disabled={busy} type="submit" className="btn-primary" style={{ flex: 1 }}>
+            Сохранить изменения
+          </button>
+          <button type="button" className="secondary" onClick={() => nav(`/match/${matchId}`)}>
+            Отмена
+          </button>
+        </div>
+      </form>
+    </Page>
+  );
+}
+
 /* ──────────────── PendingBetsSection ───────────────── */
 function PendingBetsSection({ pendingBets, matchId, labelA, labelB, match, user, onDone }) {
   const [busy, setBusy] = useState(false);
@@ -876,6 +1006,7 @@ function MatchPage() {
   const { id } = useParams();
   const matchId = Number(id);
   const { user } = useAuth();
+  const nav = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -986,7 +1117,16 @@ function MatchPage() {
         {/* ── owner controls ── */}
         {isOwner && match.status !== "finished" && match.status !== "cancelled" && (
           <div className="section-card">
-            <div className="section-title">Управление матчем</div>
+            <div className="section-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              Управление матчем
+              <button
+                className="secondary small"
+                onClick={() => nav(`/match/${matchId}/edit`)}
+                style={{ fontWeight: 600 }}
+              >
+                ✏️ Редактировать
+              </button>
+            </div>
             {!confirming ? (
               <div className="vstack tight">
                 <div style={{ fontSize: 13, color: "var(--muted)" }}>Объявить победителя:</div>
@@ -1372,6 +1512,7 @@ function AppInner() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/create" element={<CreateMatchPage />} />
         <Route path="/match/:id" element={<MatchPage />} />
+        <Route path="/match/:id/edit" element={<EditMatchPage />} />
       </Routes>
       <BottomNav />
     </>

@@ -188,6 +188,58 @@ export function matchesRoutes({ db }) {
     }
   });
 
+  // creator can edit all match fields (title, location, start_time, notes, teams, odds)
+  router.patch("/:id", requireAuth, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
+
+    const match = db.prepare("SELECT * FROM matches WHERE id=?").get(id);
+    if (!match) return res.status(404).json({ error: "not_found" });
+    if (match.created_by_user_id !== req.user.id) return res.status(403).json({ error: "forbidden" });
+    if (match.status === "finished" || match.status === "cancelled") {
+      return res.status(409).json({ error: "match_already_closed" });
+    }
+
+    const { title, location, start_time, notes, team_a, team_b, odds_a, odds_b } = req.body || {};
+    if (!title || !start_time) return res.status(400).json({ error: "invalid_input" });
+
+    const aIds = Array.isArray(team_a) ? team_a.map(Number).filter(Number.isFinite) : [];
+    const bIds = Array.isArray(team_b) ? team_b.map(Number).filter(Number.isFinite) : [];
+    if (aIds.length > 2 || bIds.length > 2) return res.status(400).json({ error: "max_2_per_team" });
+    const allIds = [...aIds, ...bIds];
+    if (new Set(allIds).size !== allIds.length) return res.status(400).json({ error: "duplicate_player" });
+
+    const oa = Math.max(1.01, Number(odds_a) || match.odds_a);
+    const ob = Math.max(1.01, Number(odds_b) || match.odds_b);
+
+    const doUpdate = db.transaction(() => {
+      db.prepare(
+        `UPDATE matches SET title=?, location=?, start_time=?, notes=?, odds_a=?, odds_b=? WHERE id=?`
+      ).run(
+        String(title).trim(),
+        location ? String(location).trim() : null,
+        String(start_time),
+        notes ? String(notes).trim() : null,
+        oa, ob, id
+      );
+      db.prepare("DELETE FROM match_players WHERE match_id=?").run(id);
+      const insertPlayer = db.prepare(
+        `INSERT INTO match_players (match_id, user_id, team, slot) VALUES (?, ?, ?, ?)`
+      );
+      aIds.forEach((uid, i) => insertPlayer.run(id, uid, "A", i + 1));
+      bIds.forEach((uid, i) => insertPlayer.run(id, uid, "B", i + 1));
+    });
+
+    try {
+      doUpdate();
+      const updated = db.prepare("SELECT * FROM matches WHERE id=?").get(id);
+      const players = getPlayers(db, id);
+      return res.json({ match: updated, players });
+    } catch (e) {
+      return res.status(500).json({ error: "server_error", detail: e.message });
+    }
+  });
+
   // creator can lock/cancel the match (but NOT finish — use /winner for that)
   router.patch("/:id/status", requireAuth, (req, res) => {
     const id = Number(req.params.id);
