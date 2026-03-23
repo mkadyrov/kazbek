@@ -756,6 +756,121 @@ function NewChallengeWidget({ match, matchId, labelA, labelB, user, onDone }) {
   );
 }
 
+/* ─────────────── PayoutReport ──────────────────────── */
+function PayoutReport({ match, matchedPairs, pendingBets }) {
+  const winner = match.winner;
+  const hasData = matchedPairs.length > 0 || pendingBets.length > 0;
+  if (!hasData) return null;
+
+  // Aggregate per user across all pairs/bets
+  const userMap = {};
+  function ensureUser(bet) {
+    const uid = bet.user_id;
+    if (!userMap[uid]) {
+      userMap[uid] = {
+        user: { id: uid, username: bet.username, first_name: bet.first_name, last_name: bet.last_name, photo_url: bet.photo_url },
+        matchedStake: 0,
+        payout: 0,
+        pendingRefund: 0,
+      };
+    }
+    return userMap[uid];
+  }
+
+  for (const pair of matchedPairs) {
+    const ua = ensureUser(pair.bet_a);
+    const ub = ensureUser(pair.bet_b);
+    ua.matchedStake += pair.bet_a.amount_tenge;
+    ub.matchedStake += pair.bet_b.amount_tenge;
+    if (winner === "A") ua.payout += pair.net_payout;
+    else if (winner === "B") ub.payout += pair.net_payout;
+  }
+
+  for (const bet of pendingBets) {
+    ensureUser(bet).pendingRefund += bet.amount_tenge;
+  }
+
+  const rows = Object.values(userMap)
+    .map((e) => ({
+      ...e,
+      toPay: e.payout + e.pendingRefund,
+      profit: e.payout - e.matchedStake,
+    }))
+    .sort((a, b) => b.profit - a.profit);
+
+  const totalToPay = rows.reduce((s, r) => s + r.toPay, 0);
+  const totalCommission = matchedPairs.reduce((s, p) => s + (p.commission_tenge || 0), 0);
+
+  return (
+    <div className="section-card">
+      <div className="section-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        Отчёт по выплатам
+        {!winner && (
+          <span style={{ fontWeight: 400, fontSize: 11, color: "var(--muted)", background: "var(--surface2)", padding: "2px 8px", borderRadius: 6 }}>
+            победитель не объявлен
+          </span>
+        )}
+      </div>
+
+      <div className="payout-report">
+        {rows.map((r) => {
+          const isWin  = !!winner && r.profit > 0;
+          const isLose = !!winner && r.profit < 0;
+          return (
+            <div key={r.user.id} className={`payout-row${isWin ? " win" : isLose ? " lose" : ""}`}>
+              <Avatar user={r.user} size={30} />
+              <div className="payout-info">
+                <div className="payout-name">{displayName(r.user)}</div>
+                <div className="payout-sub">
+                  ставка: {r.matchedStake.toLocaleString("ru-RU")} ₸
+                  {r.pendingRefund > 0 && (
+                    <span className="payout-refund-badge">
+                      + возврат {r.pendingRefund.toLocaleString("ru-RU")} ₸
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="payout-right">
+                {winner ? (
+                  <>
+                    {r.toPay > 0 && (
+                      <div className="payout-receive">
+                        {r.toPay.toLocaleString("ru-RU")} ₸
+                      </div>
+                    )}
+                    <div className={`payout-delta${isWin ? " pos" : isLose ? " neg" : ""}`}>
+                      {r.profit >= 0
+                        ? `+${r.profit.toLocaleString("ru-RU")}`
+                        : r.profit.toLocaleString("ru-RU")
+                      } ₸
+                    </div>
+                  </>
+                ) : (
+                  <div className="payout-receive neutral">
+                    {r.matchedStake.toLocaleString("ru-RU")} ₸
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {winner && (
+        <div className="payout-total-row">
+          <span>Итого к выплате:</span>
+          <strong>{totalToPay.toLocaleString("ru-RU")} ₸</strong>
+          {totalCommission > 0 && (
+            <span style={{ color: "#f59e0b", fontSize: 12, marginLeft: 4 }}>
+              (комиссия: {totalCommission.toLocaleString("ru-RU")} ₸)
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ──────────────────────── MatchPage ─────────────────── */
 function MatchPage() {
   const { id } = useParams();
@@ -979,6 +1094,13 @@ function MatchPage() {
             user={user} onDone={load}
           />
         </div>
+
+        {/* ── payout report ── */}
+        <PayoutReport
+          match={match}
+          matchedPairs={matchedPairs}
+          pendingBets={pendingBets}
+        />
 
         {/* ── matched pairs ── */}
         {matchedPairs.length > 0 && (
