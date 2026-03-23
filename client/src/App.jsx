@@ -1001,6 +1001,136 @@ function PayoutReport({ match, matchedPairs, pendingBets }) {
   );
 }
 
+/* ─────────────────────── MatchChat ──────────────────── */
+function fmtTime(isoStr) {
+  if (!isoStr) return "";
+  const d = new Date(isoStr);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function MatchChat({ matchId, user }) {
+  const [messages, setMessages]   = useState([]);
+  const [text, setText]           = useState("");
+  const [busy, setBusy]           = useState(false);
+  const [error, setError]         = useState("");
+  const lastIdRef                 = useRef(0);
+  const bottomRef                 = useRef(null);
+  const atBottomRef               = useRef(true);
+  const scrollRef                 = useRef(null);
+
+  // track whether user is scrolled to bottom
+  function onScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+  }
+
+  function scrollToBottom(force = false) {
+    if (force || atBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }
+
+  // initial load
+  useEffect(() => {
+    api.getMessages(matchId, 0)
+      .then((d) => {
+        const msgs = d.messages || [];
+        setMessages(msgs);
+        if (msgs.length) lastIdRef.current = msgs[msgs.length - 1].id;
+        // scroll to bottom on first load
+        setTimeout(() => bottomRef.current?.scrollIntoView(), 50);
+      })
+      .catch(() => {});
+  }, [matchId]);
+
+  // poll every 4 s
+  useEffect(() => {
+    const iv = setInterval(() => {
+      api.getMessages(matchId, lastIdRef.current)
+        .then((d) => {
+          const msgs = d.messages || [];
+          if (!msgs.length) return;
+          lastIdRef.current = msgs[msgs.length - 1].id;
+          setMessages((prev) => [...prev, ...msgs]);
+          scrollToBottom();
+        })
+        .catch(() => {});
+    }, 4000);
+    return () => clearInterval(iv);
+  }, [matchId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function send(e) {
+    e.preventDefault();
+    const t = text.trim();
+    if (!t || busy) return;
+    setError(""); setBusy(true);
+    try {
+      const d = await api.sendMessage(matchId, t);
+      setText("");
+      setMessages((prev) => [...prev, d.message]);
+      lastIdRef.current = d.message.id;
+      setTimeout(() => scrollToBottom(true), 30);
+    } catch (e2) { setError(e2?.data?.error || e2.message); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="section-card chat-card">
+      <div className="section-title">Чат матча</div>
+
+      <div className="chat-scroll" ref={scrollRef} onScroll={onScroll}>
+        {messages.length === 0 && (
+          <div className="chat-empty">Пока нет сообщений. Будьте первым!</div>
+        )}
+        {messages.map((m, i) => {
+          const isMe = user && m.user_id === user.id;
+          const prevSame = i > 0 && messages[i - 1].user_id === m.user_id;
+          return (
+            <div key={m.id} className={`chat-msg${isMe ? " me" : ""}${prevSame ? " compact" : ""}`}>
+              {!isMe && !prevSame && (
+                <Avatar user={m} size={28} />
+              )}
+              {!isMe && prevSame && <div className="chat-avatar-gap" />}
+              <div className="chat-bubble-wrap">
+                {!isMe && !prevSame && (
+                  <div className="chat-author">{displayName(m)}</div>
+                )}
+                <div className="chat-bubble">
+                  <span className="chat-text">{m.text}</span>
+                  <span className="chat-time">{fmtTime(m.created_at)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={bottomRef} />
+      </div>
+
+      {error && <div className="error" style={{ fontSize: 12, padding: "4px 0" }}>{error}</div>}
+
+      {user ? (
+        <form className="chat-input-row" onSubmit={send}>
+          <input
+            className="chat-input"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Написать сообщение…"
+            maxLength={500}
+            autoComplete="off"
+          />
+          <button type="submit" className="chat-send-btn" disabled={busy || !text.trim()}>
+            ➤
+          </button>
+        </form>
+      ) : (
+        <div className="chat-login-hint">Войдите, чтобы писать в чат</div>
+      )}
+    </div>
+  );
+}
+
 /* ──────────────────────── MatchPage ─────────────────── */
 function MatchPage() {
   const { id } = useParams();
@@ -1295,6 +1425,10 @@ function MatchPage() {
             </div>
           </div>
         )}
+
+        {/* ── chat ── */}
+        <MatchChat matchId={matchId} user={user} />
+
       </div>
     </Page>
   );

@@ -58,6 +58,18 @@ export function migrate(db) {
     );
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS match_messages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      match_id   INTEGER NOT NULL,
+      user_id    INTEGER NOT NULL,
+      text       TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY(match_id) REFERENCES matches(id),
+      FOREIGN KEY(user_id)  REFERENCES users(id)
+    );
+  `);
+
   // Safe additive-only column migrations — never drops anything
   for (const sql of [
     "ALTER TABLE matches ADD COLUMN odds_a REAL NOT NULL DEFAULT 2.0",

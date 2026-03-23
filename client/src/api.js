@@ -58,6 +58,11 @@ export const api = {
   placeBet: (payload) => request("/api/bets", { method: "POST", auth: true, body: payload }),
   cancelBet: (id) => request(`/api/bets/${id}`, { method: "DELETE", auth: true }),
 
+  getMessages: (matchId, since = 0) =>
+    request(`/api/matches/${matchId}/messages${since ? `?since=${since}` : ""}`),
+  sendMessage: (matchId, text) =>
+    request(`/api/matches/${matchId}/messages`, { method: "POST", auth: true, body: { text } }),
+
   listUsers: (q) => request(`/api/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   getPlayerStats: () => request("/api/stats/players"),
   getDailyStats: () => request("/api/stats/daily", { auth: true }),

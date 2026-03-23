@@ -10,6 +10,7 @@ import { betsRoutes } from "./routes/bets.js";
 import { usersRoutes } from "./routes/users.js";
 import { uploadRoutes } from "./routes/upload.js";
 import { statsRoutes } from "./routes/stats.js";
+import { messagesRoutes } from "./routes/messages.js";
 
 const app = express();
 app.use(cors({
@@ -31,6 +32,7 @@ app.use("/api/bets", betsRoutes({ db }));
 app.use("/api/users", usersRoutes({ db }));
 app.use("/api/upload", uploadRoutes({ db }));
 app.use("/api/stats", statsRoutes({ db }));
+app.use("/api/matches/:matchId/messages", messagesRoutes({ db }));
 
 app.use((_req, res) => res.status(404).json({ error: "not_found" }));
 
