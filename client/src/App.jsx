@@ -1162,17 +1162,30 @@ function MatchPage() {
 
 /* ──────────────────────── PlayersPage ───────────────── */
 function PlayersPage() {
+  const [tab, setTab] = useState("list"); // "list" | "pnl"
+
+  // list tab state
   const [players, setPlayers] = useState([]);
   const [query, setQuery] = useState("");
-  const [error, setError] = useState("");
+  const [listErr, setListErr] = useState("");
+
+  // pnl tab state
+  const [pnlRows, setPnlRows] = useState(null); // null = not loaded yet
+  const [pnlErr, setPnlErr] = useState("");
 
   useEffect(() => {
     api.listUsers(query)
       .then((d) => setPlayers(d.users || []))
-      .catch((e) => setError(e?.data?.error || e.message));
+      .catch((e) => setListErr(e?.data?.error || e.message));
   }, [query]);
 
-  // level badge color: green ≥5, yellow 3.5–4.5, red <3.5
+  useEffect(() => {
+    if (tab !== "pnl" || pnlRows !== null) return;
+    api.getPlayerStats()
+      .then((d) => setPnlRows(d.players || []))
+      .catch((e) => setPnlErr(e?.data?.error || e.message));
+  }, [tab, pnlRows]);
+
   function levelColor(r) {
     if (r >= 5) return "#22c55e";
     if (r >= 3.5) return "#f59e0b";
@@ -1182,32 +1195,89 @@ function PlayersPage() {
   return (
     <Page title="Игроки">
       <div className="vstack" style={{ paddingBottom: 80 }}>
-        <div className="field" style={{ margin: 0 }}>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Поиск по имени или логину…"
-          />
+        <div className="filter-tabs">
+          <button className={`filter-tab${tab === "list" ? " active" : ""}`} onClick={() => setTab("list")}>Список</button>
+          <button className={`filter-tab${tab === "pnl"  ? " active" : ""}`} onClick={() => setTab("pnl")}>P&amp;L</button>
         </div>
-        {error && <div className="error">{error}</div>}
-        <div className="list">
-          {players.map((p, i) => (
-            <div key={p.id} className="player-row">
-              <div className="player-rank">{i + 1}</div>
-              <Avatar user={p} size={42} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{displayName(p)}</div>
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>@{p.username}</div>
-              </div>
-              <div className="level-badge" style={{ background: levelColor(p.rating) + "22", color: levelColor(p.rating), borderColor: levelColor(p.rating) + "55" }}>
-                {Number(p.rating) % 1 === 0 ? p.rating + ".0" : p.rating}
-              </div>
+
+        {/* ── list tab ── */}
+        {tab === "list" && (
+          <>
+            <div className="field" style={{ margin: 0 }}>
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Поиск по имени или логину…"
+              />
             </div>
-          ))}
-          {players.length === 0 && !error && (
-            <div className="empty">Игроков не найдено</div>
-          )}
-        </div>
+            {listErr && <div className="error">{listErr}</div>}
+            <div className="list">
+              {players.map((p, i) => (
+                <div key={p.id} className="player-row">
+                  <div className="player-rank">{i + 1}</div>
+                  <Avatar user={p} size={42} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 15 }}>{displayName(p)}</div>
+                    <div style={{ fontSize: 12, color: "var(--muted)" }}>@{p.username}</div>
+                  </div>
+                  <div className="level-badge" style={{ background: levelColor(p.rating) + "22", color: levelColor(p.rating), borderColor: levelColor(p.rating) + "55" }}>
+                    {Number(p.rating) % 1 === 0 ? p.rating + ".0" : p.rating}
+                  </div>
+                </div>
+              ))}
+              {players.length === 0 && !listErr && <div className="empty">Игроков не найдено</div>}
+            </div>
+          </>
+        )}
+
+        {/* ── pnl tab ── */}
+        {tab === "pnl" && (
+          <>
+            {pnlErr && <div className="error">{pnlErr}</div>}
+            {pnlRows === null && !pnlErr && <div className="empty">Загрузка…</div>}
+            {pnlRows !== null && pnlRows.length === 0 && (
+              <div className="empty">Нет завершённых матчей со ставками</div>
+            )}
+            {pnlRows !== null && pnlRows.length > 0 && (
+              <div className="pnl-table">
+                {/* header */}
+                <div className="pnl-header">
+                  <span className="pnl-col-rank">#</span>
+                  <span className="pnl-col-name">Игрок</span>
+                  <span className="pnl-col-num">В/П</span>
+                  <span className="pnl-col-num">Ставки</span>
+                  <span className="pnl-col-profit">Итог</span>
+                </div>
+                {pnlRows.map((p, i) => {
+                  const isPos = p.profit > 0;
+                  const isNeg = p.profit < 0;
+                  return (
+                    <div key={p.id} className={`pnl-row${isPos ? " pos" : isNeg ? " neg" : ""}`}>
+                      <span className="pnl-col-rank">{i + 1}</span>
+                      <div className="pnl-col-name">
+                        <Avatar user={p} size={32} />
+                        <div className="pnl-name-block">
+                          <span className="pnl-name">{displayName(p)}</span>
+                          <span className="pnl-sub">{p.wins}П / {p.losses}П · {p.bets_count} ставок</span>
+                        </div>
+                      </div>
+                      <span className="pnl-col-num pnl-wl">
+                        <span className="pnl-wins">{p.wins}W</span>
+                        <span className="pnl-losses">{p.losses}L</span>
+                      </span>
+                      <span className="pnl-col-num pnl-staked">
+                        {(p.total_staked || 0).toLocaleString("ru-RU")} ₸
+                      </span>
+                      <span className={`pnl-col-profit pnl-delta${isPos ? " pos" : isNeg ? " neg" : ""}`}>
+                        {isPos ? "+" : ""}{(p.profit || 0).toLocaleString("ru-RU")} ₸
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </Page>
   );

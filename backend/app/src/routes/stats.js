@@ -17,6 +17,47 @@ export function statsRoutes({ db }) {
     return next();
   }
 
+  // GET /api/stats/players — profit/loss leaderboard (public)
+  router.get("/players", (req, res) => {
+    const rows = db
+      .prepare(
+        `
+        SELECT
+          u.id,
+          u.username,
+          u.first_name,
+          u.last_name,
+          u.photo_url,
+          u.rating,
+          COUNT(*)                                          AS bets_count,
+          SUM(CASE WHEN m.winner = b.side THEN 1 ELSE 0 END) AS wins,
+          SUM(CASE WHEN m.winner != b.side THEN 1 ELSE 0 END) AS losses,
+          COALESCE(SUM(b.amount_tenge), 0)                  AS total_staked,
+          COALESCE(SUM(
+            CASE WHEN m.winner = b.side
+            THEN (b.amount_tenge + COALESCE(b2.amount_tenge, 0))
+                 - (b.commission_tenge + COALESCE(b2.commission_tenge, 0))
+            ELSE 0 END
+          ), 0)                                             AS total_payout
+        FROM bets b
+        JOIN users u  ON u.id  = b.user_id
+        JOIN matches m ON m.id = b.match_id AND m.status = 'finished'
+        LEFT JOIN bets b2 ON b2.id = b.matched_bet_id
+        WHERE b.bet_status = 'matched'
+        GROUP BY u.id
+        ORDER BY (total_payout - total_staked) DESC
+        `
+      )
+      .all();
+
+    const players = rows.map((r) => ({
+      ...r,
+      profit: r.total_payout - r.total_staked,
+    }));
+
+    return res.json({ players });
+  });
+
   // GET /api/stats/daily — commission & volume per day (last 60 days)
   router.get("/daily", requireAuth, requireCreator, (req, res) => {
     const days = db
