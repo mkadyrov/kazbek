@@ -410,19 +410,46 @@ function ProfilePage() {
 }
 
 /* ────────────────────── MatchesPage ─────────────────── */
+const FILTER_TABS = [
+  { id: "all",      label: "Все" },
+  { id: "active",   label: "Активные" },
+  { id: "finished", label: "Завершённые" },
+];
+
+const ACTIVE_STATUSES   = new Set(["open", "locked"]);
+const FINISHED_STATUSES = new Set(["finished", "cancelled"]);
+
 function MatchesPage() {
   const [matches, setMatches] = useState([]);
   const [error, setError] = useState("");
+  const [filter, setFilter] = useState("all");
 
   useEffect(() => {
     api.listMatches().then((d) => setMatches(d.matches || [])).catch((e) => setError(e?.data?.error || e.message));
   }, []);
 
+  const filtered = matches.filter((m) => {
+    if (filter === "active")   return ACTIVE_STATUSES.has(m.status);
+    if (filter === "finished") return FINISHED_STATUSES.has(m.status);
+    return true;
+  });
+
   return (
     <Page title="Матчи">
       {error && <div className="error">{error}</div>}
+      <div className="filter-tabs">
+        {FILTER_TABS.map((t) => (
+          <button
+            key={t.id}
+            className={`filter-tab${filter === t.id ? " active" : ""}`}
+            onClick={() => setFilter(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
       <div className="list">
-        {matches.map((m) => {
+        {filtered.map((m) => {
           const teamA = (m.players || []).filter((p) => p.team === "A");
           const teamB = (m.players || []).filter((p) => p.team === "B");
           const labelA = teamA.map(displayName).join(" & ") || "—";
@@ -460,7 +487,7 @@ function MatchesPage() {
             </NavLink>
           );
         })}
-        {matches.length === 0 && <div className="empty">Матчей пока нет</div>}
+        {filtered.length === 0 && <div className="empty">Матчей пока нет</div>}
       </div>
     </Page>
   );
