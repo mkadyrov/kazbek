@@ -1021,19 +1021,13 @@ function PayoutReport({ match, matchedPairs, pendingBets, labelA, labelB }) {
 
       {match.prize_tenge > 0 && (
         <div className="payout-prize-row">
-          <span>🏅 Призовой фонд матча:</span>
-          <strong style={{ color: "#f59e0b" }}>{match.prize_tenge.toLocaleString("ru-RU")} ₸</strong>
+          <span>🏅 Призовой фонд:</span>
+          <span style={{ color: "var(--muted)", fontSize: 12 }}>{match.prize_tenge.toLocaleString("ru-RU")} ₸ − 5% =</span>
+          <strong style={{ color: "#f59e0b" }}>
+            {(match.prize_tenge - Math.floor(match.prize_tenge * 0.05)).toLocaleString("ru-RU")} ₸
+          </strong>
           {winner ? (
-            <span style={{ fontSize: 13 }}>
-              → {winner === "A" ? labelA : labelB}
-              {(() => {
-                const cnt = winner === "A"
-                  ? (matchedPairs[0]?.bet_a ? 1 : 0)
-                  : (matchedPairs[0]?.bet_b ? 1 : 0);
-                const perPlayer = cnt > 1 ? Math.floor(match.prize_tenge / cnt) : null;
-                return perPlayer ? ` (по ${perPlayer.toLocaleString("ru-RU")} ₸)` : "";
-              })()}
-            </span>
+            <span style={{ fontSize: 13 }}>→ {winner === "A" ? labelA : labelB}</span>
           ) : (
             <span style={{ fontSize: 12, color: "var(--muted)" }}>ожидание результата</span>
           )}
@@ -1278,22 +1272,26 @@ function MatchPage() {
           )}
 
           {match.winner && (() => {
-            const winnerLabel = match.winner === "A" ? labelA : labelB;
-            const winnerPlayers = (match.winner === "A" ? teamAPlayers : teamBPlayers);
-            const perPlayer = match.prize_tenge && winnerPlayers.length > 1
-              ? Math.floor(match.prize_tenge / winnerPlayers.length)
-              : null;
+            const winnerLabel   = match.winner === "A" ? labelA : labelB;
+            const winnerPlayers = match.winner === "A" ? teamAPlayers : teamBPlayers;
+            const prizeComm     = match.prize_tenge ? Math.floor(match.prize_tenge * 0.05) : 0;
+            const netPrize      = match.prize_tenge ? match.prize_tenge - prizeComm : 0;
+            const perPlayer     = netPrize && winnerPlayers.length > 1
+              ? Math.floor(netPrize / winnerPlayers.length) : null;
             return (
               <div className="winner-banner big">
                 <div>🏆 Победитель: <strong>{winnerLabel}</strong></div>
                 {match.prize_tenge > 0 && (
                   <div className="winner-prize-row">
-                    <span>Выигрыш: <strong style={{ color: "#22c55e" }}>{match.prize_tenge.toLocaleString("ru-RU")} ₸</strong></span>
+                    <span>Выигрыш: <strong style={{ color: "#22c55e" }}>{netPrize.toLocaleString("ru-RU")} ₸</strong></span>
                     {perPlayer && (
-                      <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>
-                        (по {perPlayer.toLocaleString("ru-RU")} ₸ каждому)
+                      <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                        (по {perPlayer.toLocaleString("ru-RU")} ₸)
                       </span>
                     )}
+                    <span style={{ fontSize: 12, color: "#f59e0b" }}>
+                      −{prizeComm.toLocaleString("ru-RU")} ₸ ком.
+                    </span>
                   </div>
                 )}
               </div>
