@@ -134,7 +134,7 @@ export function matchesRoutes({ db }) {
       return res.status(403).json({ error: "not_allowed_to_create_matches" });
     }
 
-    const { title, location, start_time, notes, team_a, team_b, odds_a, odds_b } = req.body || {};
+    const { title, location, start_time, notes, team_a, team_b, odds_a, odds_b, prize_tenge } = req.body || {};
     if (!title || !start_time) {
       return res.status(400).json({ error: "invalid_input" });
     }
@@ -154,9 +154,10 @@ export function matchesRoutes({ db }) {
 
     const oa = Math.max(1.01, Number(odds_a) || 2.0);
     const ob = Math.max(1.01, Number(odds_b) || 2.0);
+    const prize = prize_tenge ? Math.floor(Math.abs(Number(prize_tenge))) || null : null;
 
     const insertMatch = db.prepare(
-      `INSERT INTO matches (created_by_user_id, title, location, start_time, notes, odds_a, odds_b) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO matches (created_by_user_id, title, location, start_time, notes, odds_a, odds_b, prize_tenge) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     );
     const insertPlayer = db.prepare(
       `INSERT INTO match_players (match_id, user_id, team, slot) VALUES (?, ?, ?, ?)`
@@ -170,7 +171,8 @@ export function matchesRoutes({ db }) {
         String(start_time),
         notes ? String(notes).trim() : null,
         oa,
-        ob
+        ob,
+        prize
       );
       const mid = info.lastInsertRowid;
       aIds.forEach((uid, i) => insertPlayer.run(mid, uid, "A", i + 1));
@@ -200,7 +202,7 @@ export function matchesRoutes({ db }) {
       return res.status(409).json({ error: "match_already_closed" });
     }
 
-    const { title, location, start_time, notes, team_a, team_b, odds_a, odds_b, score } = req.body || {};
+    const { title, location, start_time, notes, team_a, team_b, odds_a, odds_b, score, prize_tenge } = req.body || {};
     if (!title || !start_time) return res.status(400).json({ error: "invalid_input" });
 
     const aIds = Array.isArray(team_a) ? team_a.map(Number).filter(Number.isFinite) : [];
@@ -211,10 +213,11 @@ export function matchesRoutes({ db }) {
 
     const oa = Math.max(1.01, Number(odds_a) || match.odds_a);
     const ob = Math.max(1.01, Number(odds_b) || match.odds_b);
+    const prize = prize_tenge ? Math.floor(Math.abs(Number(prize_tenge))) || null : null;
 
     const doUpdate = db.transaction(() => {
       db.prepare(
-        `UPDATE matches SET title=?, location=?, start_time=?, notes=?, odds_a=?, odds_b=?, score=? WHERE id=?`
+        `UPDATE matches SET title=?, location=?, start_time=?, notes=?, odds_a=?, odds_b=?, score=?, prize_tenge=? WHERE id=?`
       ).run(
         String(title).trim(),
         location ? String(location).trim() : null,
@@ -222,6 +225,7 @@ export function matchesRoutes({ db }) {
         notes ? String(notes).trim() : null,
         oa, ob,
         score ? String(score).trim() : null,
+        prize,
         id
       );
       db.prepare("DELETE FROM match_players WHERE match_id=?").run(id);

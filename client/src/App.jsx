@@ -483,6 +483,9 @@ function MatchesPage() {
                 </div>
               )}
               <div className="match-footer">
+                {m.prize_tenge > 0 && (
+                  <span className="prize-badge">🏅 {m.prize_tenge.toLocaleString("ru-RU")} ₸</span>
+                )}
                 <span>Пул: {(m.total_pool_tenge || 0).toLocaleString("ru-RU")} ₸</span>
                 <span>{m.matched_pairs_count || 0} пар</span>
                 {m.pending_bets_count > 0 && <span style={{ color: "#f59e0b" }}>{m.pending_bets_count} ожидают</span>}
@@ -501,7 +504,7 @@ function MatchesPage() {
 function CreateMatchPage() {
   const nav = useNavigate();
   const { user } = useAuth();
-  const [form, setForm] = useState({ title: "", location: "", start_time: "", notes: "", odds_a: "2.00", odds_b: "2.00" });
+  const [form, setForm] = useState({ title: "", location: "", start_time: "", notes: "", odds_a: "2.00", odds_b: "2.00", prize: "" });
   const [teamA, setTeamA] = useState([]);
   const [teamB, setTeamB] = useState([]);
   const [error, setError] = useState("");
@@ -523,6 +526,7 @@ function CreateMatchPage() {
         notes: form.notes || null,
         team_a: teamA.map((u) => u.id), team_b: teamB.map((u) => u.id),
         odds_a: oa, odds_b: ob,
+        prize_tenge: form.prize ? Math.floor(parseDecimal(form.prize)) || null : null,
       });
       nav(`/match/${data.match.id}`);
     } catch (e2) { setError(e2?.data?.error || e2.message); }
@@ -542,6 +546,10 @@ function CreateMatchPage() {
             <div className="field"><label>Название</label><input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Финал клубного турнира" /></div>
             <div className="field"><label>Локация</label><input value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} placeholder="Клуб / корт" /></div>
             <div className="field"><label>Дата и время</label><input type="datetime-local" value={form.start_time} onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))} /></div>
+            <div className="field">
+              <label>Призовой фонд, ₸ <span style={{ fontWeight: 400, color: "var(--muted)" }}>(сумма на которую играют)</span></label>
+              <input type="text" inputMode="numeric" value={form.prize} onChange={(e) => setForm((f) => ({ ...f, prize: e.target.value }))} placeholder="50 000" />
+            </div>
             <div className="field"><label>Заметки</label><textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></div>
           </div>
         </div>
@@ -601,7 +609,7 @@ function EditMatchPage() {
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ title: "", location: "", start_time: "", notes: "", odds_a: "2.00", odds_b: "2.00", score: "" });
+  const [form, setForm] = useState({ title: "", location: "", start_time: "", notes: "", odds_a: "2.00", odds_b: "2.00", score: "", prize: "" });
   const [teamA, setTeamA] = useState([]);
   const [teamB, setTeamB] = useState([]);
   const [error, setError] = useState("");
@@ -623,6 +631,7 @@ function EditMatchPage() {
           odds_a:     String(m.odds_a ?? "2.00"),
           odds_b:     String(m.odds_b ?? "2.00"),
           score:      m.score || "",
+          prize:      m.prize_tenge ? String(m.prize_tenge) : "",
         });
         const players = d.players || [];
         setTeamA(players.filter((p) => p.team === "A"));
@@ -649,6 +658,7 @@ function EditMatchPage() {
         odds_a:     oa,
         odds_b:     ob,
         score:      form.score || null,
+        prize_tenge: form.prize ? Math.floor(parseDecimal(form.prize)) || null : null,
       });
       nav(`/match/${matchId}`);
     } catch (e2) { setError(e2?.data?.error || e2.message); }
@@ -672,6 +682,10 @@ function EditMatchPage() {
             <div className="field"><label>Название</label><input required value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Финал клубного турнира" /></div>
             <div className="field"><label>Локация</label><input value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} placeholder="Клуб / корт" /></div>
             <div className="field"><label>Дата и время</label><input required type="datetime-local" value={form.start_time} onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value }))} /></div>
+            <div className="field">
+              <label>Призовой фонд, ₸ <span style={{ fontWeight: 400, color: "var(--muted)" }}>(сумма на которую играют)</span></label>
+              <input type="text" inputMode="numeric" value={form.prize} onChange={(e) => setForm((f) => ({ ...f, prize: e.target.value }))} placeholder="50 000" />
+            </div>
             <div className="field"><label>Счёт (необязательно, например: 6:4)</label><input value={form.score} onChange={(e) => setForm((f) => ({ ...f, score: e.target.value }))} placeholder="6:4" maxLength={30} /></div>
             <div className="field"><label>Заметки</label><textarea value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} /></div>
           </div>
@@ -894,7 +908,7 @@ function NewChallengeWidget({ match, matchId, labelA, labelB, user, onDone }) {
 }
 
 /* ─────────────── PayoutReport ──────────────────────── */
-function PayoutReport({ match, matchedPairs, pendingBets }) {
+function PayoutReport({ match, matchedPairs, pendingBets, labelA, labelB }) {
   const winner = match.winner;
   const hasData = matchedPairs.length > 0 || pendingBets.length > 0;
   if (!hasData) return null;
@@ -1001,6 +1015,27 @@ function PayoutReport({ match, matchedPairs, pendingBets }) {
             <span style={{ color: "#f59e0b", fontSize: 12, marginLeft: 4 }}>
               (комиссия: {totalCommission.toLocaleString("ru-RU")} ₸)
             </span>
+          )}
+        </div>
+      )}
+
+      {match.prize_tenge > 0 && (
+        <div className="payout-prize-row">
+          <span>🏅 Призовой фонд матча:</span>
+          <strong style={{ color: "#f59e0b" }}>{match.prize_tenge.toLocaleString("ru-RU")} ₸</strong>
+          {winner ? (
+            <span style={{ fontSize: 13 }}>
+              → {winner === "A" ? labelA : labelB}
+              {(() => {
+                const cnt = winner === "A"
+                  ? (matchedPairs[0]?.bet_a ? 1 : 0)
+                  : (matchedPairs[0]?.bet_b ? 1 : 0);
+                const perPlayer = cnt > 1 ? Math.floor(match.prize_tenge / cnt) : null;
+                return perPlayer ? ` (по ${perPlayer.toLocaleString("ru-RU")} ₸)` : "";
+              })()}
+            </span>
+          ) : (
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>ожидание результата</span>
           )}
         </div>
       )}
@@ -1236,11 +1271,34 @@ function MatchPage() {
           </div>
           <div className="match-meta">{fmt(match.start_time)}{match.location ? ` · ${match.location}` : ""}</div>
 
-          {match.winner && (
-            <div className="winner-banner big">
-              🏆 Победитель: {match.winner === "A" ? labelA : labelB}
+          {match.prize_tenge > 0 && !match.winner && (
+            <div className="prize-pool-banner">
+              🏅 Играют на: <strong>{match.prize_tenge.toLocaleString("ru-RU")} ₸</strong>
             </div>
           )}
+
+          {match.winner && (() => {
+            const winnerLabel = match.winner === "A" ? labelA : labelB;
+            const winnerPlayers = (match.winner === "A" ? teamAPlayers : teamBPlayers);
+            const perPlayer = match.prize_tenge && winnerPlayers.length > 1
+              ? Math.floor(match.prize_tenge / winnerPlayers.length)
+              : null;
+            return (
+              <div className="winner-banner big">
+                <div>🏆 Победитель: <strong>{winnerLabel}</strong></div>
+                {match.prize_tenge > 0 && (
+                  <div className="winner-prize-row">
+                    <span>Выигрыш: <strong style={{ color: "#22c55e" }}>{match.prize_tenge.toLocaleString("ru-RU")} ₸</strong></span>
+                    {perPlayer && (
+                      <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>
+                        (по {perPlayer.toLocaleString("ru-RU")} ₸ каждому)
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="vs-detail">
             <div className="vs-detail-team">
@@ -1380,9 +1438,15 @@ function MatchPage() {
         {/* ── stats ── */}
         <div className="section-card">
           <div className="section-title">Статистика</div>
-          <div className="pool-row" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+          <div className="pool-row" style={{ gridTemplateColumns: `repeat(${match.prize_tenge > 0 ? 4 : 3},1fr)` }}>
+            {match.prize_tenge > 0 && (
+              <div className="pool-item">
+                <span className="pool-label">Призовой фонд</span>
+                <span className="pool-value" style={{ color: "#f59e0b" }}>{match.prize_tenge.toLocaleString("ru-RU")} ₸</span>
+              </div>
+            )}
             <div className="pool-item">
-              <span className="pool-label">В игре</span>
+              <span className="pool-label">Ставки</span>
               <span className="pool-value">{poolTotal.toLocaleString("ru-RU")} ₸</span>
             </div>
             <div className="pool-item">
@@ -1424,6 +1488,8 @@ function MatchPage() {
           match={match}
           matchedPairs={matchedPairs}
           pendingBets={pendingBets}
+          labelA={labelA}
+          labelB={labelB}
         />
 
         {/* ── matched pairs ── */}

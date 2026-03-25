@@ -420,6 +420,32 @@ button.small { padding: 7px 12px; font-size: 13px; border-radius: 10px; }
   text-align: center;
 }
 
+/* ─── prize pool ─────────────────────────────────────── */
+.prize-badge {
+  color: #f59e0b; font-weight: 700; font-size: 12px;
+  background: rgba(245,158,11,.12);
+  border-radius: 6px; padding: 1px 7px;
+  white-space: nowrap;
+}
+.prize-pool-banner {
+  margin: 10px 0 4px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(245,158,11,.1);
+  border: 1px solid rgba(245,158,11,.3);
+  font-size: 14px; color: var(--text); text-align: center;
+}
+.winner-prize-row {
+  margin-top: 6px; font-size: 14px;
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px;
+}
+.payout-prize-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding-top: 8px; margin-top: 4px;
+  border-top: 1px dashed var(--border);
+  font-size: 14px;
+}
+
 /* ─── payout report ──────────────────────────────────── */
 .payout-report { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
 
