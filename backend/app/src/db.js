@@ -77,6 +77,7 @@ export function migrate(db) {
     "ALTER TABLE matches ADD COLUMN winner TEXT",
     "ALTER TABLE matches ADD COLUMN score TEXT",
     "ALTER TABLE matches ADD COLUMN prize_tenge INTEGER",
+    "ALTER TABLE users ADD COLUMN is_blocked INTEGER NOT NULL DEFAULT 0",
     // SQLite stores 3.75 fine in an INTEGER column due to type affinity,
     // so no column type change needed — just ensure the column exists
   ]) {

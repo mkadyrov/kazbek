@@ -32,6 +32,13 @@ function fmt(isoStr) {
   });
 }
 
+// SQLite stores datetime('now') as UTC without a zone marker — treat as UTC.
+function fmtDate(isoStr) {
+  if (!isoStr) return "—";
+  const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(isoStr) ? isoStr : isoStr.replace(" ", "T") + "Z");
+  return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 const STATUS_COLOR = {
   open: "#22c55e",
   locked: "#f59e0b",
@@ -274,7 +281,10 @@ function LoginPage() {
   async function onSubmit(e) {
     e.preventDefault(); setError(""); setBusy(true);
     try { const d = await api.login(username, password); setAuth(d.token, d.user); nav("/"); }
-    catch (e2) { setError(e2?.data?.error || e2.message); }
+    catch (e2) {
+      const code = e2?.data?.error || e2.message;
+      setError(code === "account_blocked" ? "Аккаунт заблокирован. Обратитесь к организатору." : code);
+    }
     finally { setBusy(false); }
   }
 
@@ -1179,6 +1189,7 @@ function MatchPage() {
   const [confirming, setConfirming] = useState(null);
   const [oddsForm, setOddsForm]   = useState(null); // null = closed, {a,b} = editing
   const [scoreInput, setScoreInput] = useState(null); // null = closed, string = editing
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   async function load() {
     setError("");
@@ -1226,6 +1237,12 @@ function MatchPage() {
     }
     catch (e2) { setError(e2?.data?.error || e2.message); }
     finally { setBusy(false); }
+  }
+
+  async function deleteMatch() {
+    setBusy(true); setError("");
+    try { await api.deleteMatch(matchId); nav("/"); }
+    catch (e2) { setError(e2?.data?.error || e2.message); setBusy(false); }
   }
 
   async function saveScore() {
@@ -1433,6 +1450,35 @@ function MatchPage() {
           </div>
         )}
 
+        {/* ── danger zone: full deletion (owner, any status) ── */}
+        {isOwner && (
+          <div className="section-card">
+            <div className="section-title">Удаление матча</div>
+            {!confirmDelete ? (
+              <>
+                <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>
+                  Полностью удалить матч вместе с игроками, ставками и чатом. Матч исчезнет из истории и расписания — действие необратимо.
+                </div>
+                <button className="danger small" disabled={busy} onClick={() => setConfirmDelete(true)}>
+                  🗑 Удалить матч полностью
+                </button>
+              </>
+            ) : (
+              <div className="confirm-box">
+                <div style={{ fontSize: 14, marginBottom: 10 }}>
+                  Удалить матч навсегда? Это нельзя отменить.
+                </div>
+                <div className="hstack">
+                  <button className="danger" disabled={busy} onClick={deleteMatch}>
+                    Да, удалить
+                  </button>
+                  <button className="secondary" disabled={busy} onClick={() => setConfirmDelete(false)}>Отмена</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── stats ── */}
         <div className="section-card">
           <div className="section-title">Статистика</div>
@@ -1554,11 +1600,16 @@ function MatchPage() {
 
 /* ──────────────────────── PlayersPage ───────────────── */
 function PlayersPage() {
+  const { user: me } = useAuth();
+  const isAdmin = canCreate(me);
   const [tab, setTab] = useState("list"); // "list" | "pnl"
 
   // list tab state
   const [players, setPlayers] = useState([]);
   const [query, setQuery] = useState("");
+  const [blockBusy, setBlockBusy] = useState(null); // userId being toggled
+  const [delBusy, setDelBusy] = useState(null); // userId being deleted
+  const [confirmDel, setConfirmDel] = useState(null); // userId pending confirm
   const [listErr, setListErr] = useState("");
 
   // pnl tab state
@@ -1570,6 +1621,33 @@ function PlayersPage() {
       .then((d) => setPlayers(d.users || []))
       .catch((e) => setListErr(e?.data?.error || e.message));
   }, [query]);
+
+  async function toggleBlock(p) {
+    setBlockBusy(p.id);
+    try {
+      const d = await api.blockUser(p.id, !p.is_blocked);
+      setPlayers((prev) => prev.map((u) => u.id === p.id ? { ...u, is_blocked: d.user.is_blocked } : u));
+    } catch { /* ignore */ }
+    finally { setBlockBusy(null); }
+  }
+
+  const DEL_ERRORS = {
+    cannot_delete_admin: "Нельзя удалить администратора",
+    cannot_delete_self: "Нельзя удалить себя",
+    user_has_matches: "У игрока есть созданные матчи — сначала удалите их",
+  };
+
+  async function deletePlayer(p) {
+    setDelBusy(p.id); setListErr("");
+    try {
+      await api.deleteUser(p.id);
+      setPlayers((prev) => prev.filter((u) => u.id !== p.id));
+      setConfirmDel(null);
+    } catch (e) {
+      const code = e?.data?.error || e.message;
+      setListErr(DEL_ERRORS[code] || code);
+    } finally { setDelBusy(null); }
+  }
 
   useEffect(() => {
     if (tab !== "pnl" || pnlRows !== null) return;
@@ -1605,16 +1683,51 @@ function PlayersPage() {
             {listErr && <div className="error">{listErr}</div>}
             <div className="list">
               {players.map((p, i) => (
-                <div key={p.id} className="player-row">
+                <div key={p.id} className={`player-row${p.is_blocked ? " blocked" : ""}`}>
                   <div className="player-rank">{i + 1}</div>
                   <Avatar user={p} size={42} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 15 }}>{displayName(p)}</div>
-                    <div style={{ fontSize: 12, color: "var(--muted)" }}>@{p.username}</div>
+                    <div style={{ fontWeight: 600, fontSize: 15, display: "flex", alignItems: "center", gap: 6 }}>
+                      {displayName(p)}
+                      {p.is_blocked && <span className="blocked-badge">заблокирован</span>}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                      @{p.username}
+                      {p.created_at && <span> · рег. {fmtDate(p.created_at)}</span>}
+                    </div>
                   </div>
                   <div className="level-badge" style={{ background: levelColor(p.rating) + "22", color: levelColor(p.rating), borderColor: levelColor(p.rating) + "55" }}>
                     {Number(p.rating) % 1 === 0 ? p.rating + ".0" : p.rating}
                   </div>
+                  {isAdmin && (
+                    <button
+                      className={p.is_blocked ? "secondary small" : "danger small"}
+                      disabled={blockBusy === p.id}
+                      onClick={() => toggleBlock(p)}
+                      style={{ flexShrink: 0 }}
+                    >
+                      {p.is_blocked ? "Разблокировать" : "Блок"}
+                    </button>
+                  )}
+                  {isAdmin && (
+                    confirmDel === p.id ? (
+                      <div className="hstack" style={{ gap: 4, flexShrink: 0 }}>
+                        <button className="danger small" disabled={delBusy === p.id} onClick={() => deletePlayer(p)}>
+                          {delBusy === p.id ? "…" : "Точно?"}
+                        </button>
+                        <button className="secondary small" onClick={() => setConfirmDel(null)}>✕</button>
+                      </div>
+                    ) : (
+                      <button
+                        className="danger small"
+                        title="Удалить игрока"
+                        onClick={() => { setConfirmDel(p.id); setListErr(""); }}
+                        style={{ flexShrink: 0 }}
+                      >
+                        🗑
+                      </button>
+                    )
+                  )}
                 </div>
               ))}
               {players.length === 0 && !listErr && <div className="empty">Игроков не найдено</div>}

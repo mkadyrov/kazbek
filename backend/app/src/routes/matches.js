@@ -331,6 +331,34 @@ export function matchesRoutes({ db }) {
     return res.json({ match: updated });
   });
 
+  // creator fully deletes a match — removes the match itself plus its players,
+  // bets and chat messages. Unlike "cancelled", it disappears from history,
+  // schedule and players' views entirely.
+  router.delete("/:id", requireAuth, (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: "invalid_id" });
+
+    const match = db.prepare("SELECT * FROM matches WHERE id=?").get(id);
+    if (!match) return res.status(404).json({ error: "not_found" });
+    if (match.created_by_user_id !== req.user.id) {
+      return res.status(403).json({ error: "forbidden" });
+    }
+
+    const doDelete = db.transaction(() => {
+      db.prepare("DELETE FROM match_messages WHERE match_id=?").run(id);
+      db.prepare("DELETE FROM bets WHERE match_id=?").run(id);
+      db.prepare("DELETE FROM match_players WHERE match_id=?").run(id);
+      db.prepare("DELETE FROM matches WHERE id=?").run(id);
+    });
+
+    try {
+      doDelete();
+      return res.json({ ok: true, deleted_id: id });
+    } catch (e) {
+      return res.status(500).json({ error: "server_error", detail: e.message });
+    }
+  });
+
   return router;
 }
 

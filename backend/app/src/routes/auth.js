@@ -47,6 +47,7 @@ export function authRoutes({ db }) {
 
     const ok = bcrypt.compareSync(String(password), row.password_hash);
     if (!ok) return res.status(401).json({ error: "invalid_credentials" });
+    if (row.is_blocked) return res.status(403).json({ error: "account_blocked" });
 
     const user = {
       id: row.id,

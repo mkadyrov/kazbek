@@ -54,6 +54,7 @@ export const api = {
 
   setWinner: (id, winner) =>
     request(`/api/matches/${id}/winner`, { method: "PATCH", auth: true, body: { winner } }),
+  deleteMatch: (id) => request(`/api/matches/${id}`, { method: "DELETE", auth: true }),
   updateOdds: (id, odds_a, odds_b) =>
     request(`/api/matches/${id}/odds`, { method: "PATCH", auth: true, body: { odds_a, odds_b } }),
 
@@ -66,6 +67,9 @@ export const api = {
     request(`/api/matches/${matchId}/messages`, { method: "POST", auth: true, body: { text } }),
 
   listUsers: (q) => request(`/api/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  blockUser: (id, blocked) =>
+    request(`/api/users/${id}/block`, { method: "PATCH", auth: true, body: { blocked } }),
+  deleteUser: (id) => request(`/api/users/${id}`, { method: "DELETE", auth: true }),
   getPlayerStats: () => request("/api/stats/players"),
   getDailyStats: () => request("/api/stats/daily", { auth: true }),
 
