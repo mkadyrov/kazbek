@@ -3,6 +3,23 @@ import { requireAuth } from "../auth.js";
 import { config } from "../config.js";
 import { searchVariants } from "../translit.js";
 
+// Shared "deleted user" account. Created matches are reassigned here when their
+// author is removed, so the match (and its history) survives. Blocked from login.
+const PLACEHOLDER_USERNAME = "deleted_user";
+function getOrCreatePlaceholderUser(db) {
+  const existing = db
+    .prepare("SELECT id FROM users WHERE username=?")
+    .get(PLACEHOLDER_USERNAME);
+  if (existing) return existing.id;
+  const info = db
+    .prepare(
+      `INSERT INTO users (username, password_hash, first_name, last_name, is_blocked)
+       VALUES (?, '!', 'Удаленный', 'Юзер', 1)`
+    )
+    .run(PLACEHOLDER_USERNAME);
+  return info.lastInsertRowid;
+}
+
 function requireAdmin(req, res, next) {
   const allowed = config.matchCreators
     .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -91,16 +108,21 @@ export function usersRoutes({ db }) {
     if (req.user.id === id) {
       return res.status(400).json({ error: "cannot_delete_self" });
     }
-
-    // Block deletion if this player created matches — those need handling first
-    const created = db
-      .prepare("SELECT COUNT(1) AS n FROM matches WHERE created_by_user_id=?")
-      .get(id).n;
-    if (created > 0) {
-      return res.status(409).json({ error: "user_has_matches" });
+    if (target.username === PLACEHOLDER_USERNAME) {
+      return res.status(400).json({ error: "cannot_delete_placeholder" });
     }
 
     const doDelete = db.transaction(() => {
+      // Matches this player created stay alive — reassign authorship to a
+      // shared placeholder "Удаленный Юзер" account so history/schedule survive.
+      const createdCount = db
+        .prepare("SELECT COUNT(1) AS n FROM matches WHERE created_by_user_id=?")
+        .get(id).n;
+      if (createdCount > 0) {
+        const placeholderId = getOrCreatePlaceholderUser(db);
+        db.prepare("UPDATE matches SET created_by_user_id=? WHERE created_by_user_id=?")
+          .run(placeholderId, id);
+      }
       db.prepare("DELETE FROM match_messages WHERE user_id=?").run(id);
       db.prepare("DELETE FROM bets WHERE user_id=?").run(id);
       db.prepare("DELETE FROM match_players WHERE user_id=?").run(id);

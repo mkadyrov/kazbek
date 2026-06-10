@@ -1634,7 +1634,7 @@ function PlayersPage() {
   const DEL_ERRORS = {
     cannot_delete_admin: "Нельзя удалить администратора",
     cannot_delete_self: "Нельзя удалить себя",
-    user_has_matches: "У игрока есть созданные матчи — сначала удалите их",
+    cannot_delete_placeholder: "Нельзя удалить системного пользователя",
   };
 
   async function deletePlayer(p) {
