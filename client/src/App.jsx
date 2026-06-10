@@ -59,7 +59,7 @@ const STATUS_BTN_RU = {
   cancelled: "Отменить матч",
 };
 
-const MATCH_CREATORS = ["kazbek", "maxat", "nur_asan1701"];
+const MATCH_CREATORS = ["kazbek1", "maxat", "nur_asan1701"];
 function canCreate(user) {
   return user && MATCH_CREATORS.includes(user.username?.toLowerCase());
 }
