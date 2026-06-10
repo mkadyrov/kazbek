@@ -1884,6 +1884,61 @@ function AppInner() {
   );
 }
 
+/* ─────────────────── SiteGate (public access password) ─────────────── */
+const SITE_PASSWORD = "apl2026"; // compared case-insensitively
+const SITE_GATE_KEY = "site_access_ok";
+
+function SiteGate({ children }) {
+  const [unlocked, setUnlocked] = useState(
+    () => localStorage.getItem(SITE_GATE_KEY) === "1"
+  );
+  const [val, setVal] = useState("");
+  const [err, setErr] = useState(false);
+
+  if (unlocked) return children;
+
+  function submit(e) {
+    e.preventDefault();
+    if (val.trim().toLowerCase() === SITE_PASSWORD) {
+      localStorage.setItem(SITE_GATE_KEY, "1");
+      setUnlocked(true);
+    } else {
+      setErr(true);
+    }
+  }
+
+  return (
+    <div style={{
+      minHeight: "100vh", display: "flex", alignItems: "center",
+      justifyContent: "center", padding: 20,
+    }}>
+      <form onSubmit={submit} className="section-card" style={{ width: "100%", maxWidth: 340 }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700 }}>APL</h2>
+        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>
+          Введите пароль доступа
+        </div>
+        <div className="field" style={{ margin: 0 }}>
+          <input
+            type="password"
+            value={val}
+            onChange={(e) => { setVal(e.target.value); setErr(false); }}
+            placeholder="Пароль"
+            autoFocus
+          />
+        </div>
+        {err && <div className="error" style={{ marginTop: 8 }}>Неверный пароль</div>}
+        <button className="btn-primary" type="submit" style={{ width: "100%", marginTop: 12 }}>
+          Войти
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export default function App() {
-  return <AuthProvider><AppInner /></AuthProvider>;
+  return (
+    <SiteGate>
+      <AuthProvider><AppInner /></AuthProvider>
+    </SiteGate>
+  );
 }
