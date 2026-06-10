@@ -1689,7 +1689,7 @@ function PlayersPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 15, display: "flex", alignItems: "center", gap: 6 }}>
                       {displayName(p)}
-                      {p.is_blocked && <span className="blocked-badge">заблокирован</span>}
+                      {!!p.is_blocked && <span className="blocked-badge">заблокирован</span>}
                     </div>
                     <div style={{ fontSize: 12, color: "var(--muted)" }}>
                       @{p.username}
