@@ -1885,7 +1885,7 @@ function AppInner() {
 }
 
 /* ─────────────────── SiteGate (public access password) ─────────────── */
-const SITE_PASSWORD = "apl2026"; // compared case-insensitively
+const SITE_PASSWORD = "apl111"; // compared case-insensitively
 const SITE_GATE_KEY = "site_access_ok";
 
 function SiteGate({ children }) {
